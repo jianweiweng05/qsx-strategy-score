@@ -212,7 +212,7 @@ def _implausible_flags(r: pd.Series, eq: pd.Series, span_years: float,
     max_month = 0.0
     if isinstance(r.index, pd.DatetimeIndex):
         try:
-            m = (1.0 + r).resample("M").prod() - 1.0
+            m = (1.0 + r).resample(metrics.pandas_freq("ME", "M")).prod() - 1.0
             if len(m):
                 max_month = float(m.max())
         except Exception:  # noqa: BLE001

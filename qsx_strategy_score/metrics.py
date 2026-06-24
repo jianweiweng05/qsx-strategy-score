@@ -15,6 +15,15 @@ import pandas as pd
 SQRT2 = math.sqrt(2.0)
 
 
+def pandas_freq(new_alias: str, old_alias: str) -> str:
+    """Return the pandas offset alias supported by the installed pandas version."""
+    try:
+        pd.tseries.frequencies.to_offset(new_alias)
+        return new_alias
+    except Exception:  # noqa: BLE001
+        return old_alias
+
+
 # --------------------------------------------------------------------------- #
 # basic performance / risk
 # --------------------------------------------------------------------------- #
@@ -180,7 +189,11 @@ def top_contributor_recurrence(r: pd.Series) -> dict:
         return dict(recurrence=1.0, top_block_share=0.0, n_blocks=1, freq="-")
     dt = r.index
     span_years = max((dt[-1] - dt[0]).days / 365.25, 1e-9)
-    freq = "Y" if span_years >= 3 else "Q" if span_years >= 1 else "M"
+    freq = (
+        pandas_freq("YE", "Y") if span_years >= 3
+        else pandas_freq("QE", "Q") if span_years >= 1
+        else pandas_freq("ME", "M")
+    )
     pnl = r.groupby(pd.Grouper(freq=freq)).sum()
     pos = pnl.clip(lower=0)
     total = float(pos.sum())

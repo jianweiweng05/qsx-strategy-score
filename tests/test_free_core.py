@@ -65,7 +65,7 @@ def test_preflight_uses_free_loader_only():
 
 
 def test_overlay_client_normalizes_to_daily_minimal_csv():
-    idx = pd.date_range("2024-01-01", periods=400 * 2, freq="12H")
+    idx = pd.date_range("2024-01-01", periods=400 * 2, freq="12h")
     r = pd.Series(np.tile([0.01, -0.002], 400), index=idx)
     normalized = normalize_daily_returns(r)
 
