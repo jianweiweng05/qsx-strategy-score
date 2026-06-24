@@ -122,6 +122,17 @@ Raw files, strategy code, trade logs and account information remain local.
 
 > 先免费测试：你的策略外面加一层 QSX 通用虚拟币仓位控制器，风险收益结构会不会变好。
 
+## Example Scorecards
+
+不同策略会得到不同类型的结论。下面是几类常见结果：
+
+- Real Edge Candidate：跑赢买入持有和随机择时，但仍需要更多 forward / OOS 证据。
+- Beta Trap：看起来赚钱，但主要像资产 beta 或行情暴露，不像真正择时 edge。
+- Too Clean To Trust：曲线好得不真实，优先排查未来函数、幸存者偏差、成交和费用。
+- Overlay Candidate：策略可能有正 edge，但回撤和暴露控制较差，适合先测试 QSX Overlay。
+
+![QSX Strategy Score sample scorecards](assets/readme/sample-scorecard-stack.png)
+
 ## Example Report
 
 示例：`examples/strategy_beta.csv`
@@ -255,6 +266,8 @@ entry_time,exit_time,pnl_pct,side,symbol
 ```
 
 交易日志里的 `pnl_pct` 会按百分比处理。注意：closed-trade drawdown 可能低估持仓过程中的真实浮亏，真实风险最好提供 bar-level MTM equity。
+
+TradingView Strategy Tester 导出的 `.xlsx` 也可以直接上传，包括多 sheet workbook、中文/英文列名的 `Trades` 明细表，以及同一笔交易拆成“进场/出场”两行的 List of Trades。评分器会自动选择交易明细 sheet，将 `Net PnL %` 按百分比处理，并只用出场/平仓行作为 closed-trade 收益。
 
 ## Python API
 
