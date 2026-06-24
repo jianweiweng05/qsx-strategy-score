@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qsx-score-free"
+version = "0.1.0"
+description = "QuantScopeX Strategy Score — an open-source, overfitting-aware strategy scorecard from CSV/TSV/Excel returns, equity, or trade-log uploads."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "QuantScopeX" }]
+keywords = ["quant", "trading", "backtest", "strategy", "score", "sharpe", "overfitting", "psr", "crypto"]
+dependencies = [
+    "numpy>=1.21",
+    "pandas>=1.4",
+]
+
+[project.urls]
+Homepage = "https://www.quantscopex.com/"
+HostedTool = "https://www.quantscopex.com/tools?utm_source=pypi&utm_medium=project_urls&utm_campaign=qsx_strategy_score"
+FullAuditReport = "https://www.quantscopex.com/report?utm_source=pypi&utm_medium=project_urls&utm_campaign=qsx_strategy_score"
+Source = "https://github.com/jianweiweng05/qsx-strategy-score"
+Issues = "https://github.com/jianweiweng05/qsx-strategy-score/issues"
+
+[project.optional-dependencies]
+card = ["matplotlib>=3.5"]
+app = ["streamlit>=1.20", "matplotlib>=3.5"]
+excel = ["openpyxl>=3.1", "xlrd>=2.0"]
+dev = ["pytest>=7.0", "matplotlib>=3.5", "openpyxl>=3.1", "xlrd>=2.0"]
+
+[project.scripts]
+qsx-score = "qsx_strategy_score.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["qsx_strategy_score*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
