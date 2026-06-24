@@ -395,6 +395,40 @@ def test_unified_png_scorecard_renders_wide_card(tmp_path):
         assert img.size == (1600, 900)
 
 
+def test_coerce_numeric_series_is_public():
+    # Downstream consumers (the QuantScopeX Pro report path) import this public
+    # wrapper; it must stay exported with the (series, is_percent) contract.
+    from qsx_strategy_score.io import coerce_numeric_series
+
+    vals, is_pct = coerce_numeric_series(pd.Series(["1.2%", "-0.5%", "0.3%"]))
+    assert is_pct is True
+    assert vals.round(4).tolist() == [0.012, -0.005, 0.003]
+
+    vals2, is_pct2 = coerce_numeric_series(pd.Series([0.01, -0.02, 0.03]))
+    assert is_pct2 is False
+    assert vals2.round(4).tolist() == [0.01, -0.02, 0.03]
+
+
+def test_cap_reasons_zh_mirrors_cap_reasons(tmp_path):
+    # The bilingual web UI reads meta.cap_reasons_zh directly (push model). A
+    # forward-looking filename forces a hard cap so cap_reasons is non-empty.
+    path = tmp_path / "BTC_leaky_future_ma.csv"
+    pd.DataFrame({
+        "date": pd.date_range("2020-01-01", periods=400, freq="D"),
+        "return": np.tile([0.02, -0.001, 0.015, 0.0], 100),
+    }).to_csv(path, index=False)
+    r, meta = load_returns(path)
+    report = score_unified(r, "crypto", meta=meta)
+
+    en = report.meta["cap_reasons"]
+    zh = report.meta["cap_reasons_zh"]
+    assert isinstance(zh, list)
+    assert len(zh) == len(en)
+    assert len(zh) > 0  # this strategy is capped
+    # zh must be a real localization (contains CJK), not an English passthrough
+    assert any(any("一" <= ch <= "鿿" for ch in s) for s in zh)
+
+
 def test_degenerate_series_metrics_abstain():
     # A near-constant return path (interpolated / stale equity, a fixed coupon)
     # has a ~1e-19 std, NOT exactly 0. The dispersion guards must abstain rather

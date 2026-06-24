@@ -24,6 +24,7 @@ import pandas as pd
 
 from . import metrics
 from .io import SECONDS_PER_YEAR
+from .i18n import localize_cap_reason
 from .profiles import get_profile, ANCHORS_SOURCE, VALIDATED
 
 T_SPLIT_MIN = 150  # min observations before a train/holdout split is trustworthy
@@ -905,6 +906,9 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         sample_unit=("trades" if meta.get("caliber") == "closed_trade" else "bars"),
         effective_n=(round(float(eff_n), 1) if eff_n is not None else None),
         uncapped_score=uncapped, capped=bool(capped), cap_reasons=(hard + soft + exp),
+        # zh mirror of cap_reasons for push-model clients (e.g. the QuantScopeX
+        # bilingual web UI re-renders both languages without re-fetching).
+        cap_reasons_zh=[localize_cap_reason(x, "zh") for x in (hard + soft + exp)],
         random_p=(round(rand_p, 4) if rand_p is not None else None),
         random_control_method=(rc.get("method") if rc else None),
         random_control_sims=(int(rc["random_sims"]) if rc and rc.get("random_sims") is not None else None),

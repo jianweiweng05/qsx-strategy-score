@@ -365,6 +365,13 @@ def _coerce_numeric(s: pd.Series):
     return num, bool(pct or name_is_pct)
 
 
+def coerce_numeric_series(s: pd.Series):
+    """Public wrapper around _coerce_numeric for downstream consumers (e.g. the
+    QuantScopeX Pro report path) that need the same percent/decimal unit parsing.
+    Returns (numeric_series, is_percent)."""
+    return _coerce_numeric(s)
+
+
 def _parse_dates(s: pd.Series) -> pd.Series:
     """Parse a date/time column robustly: ISO/strings AND Unix epoch.
 
