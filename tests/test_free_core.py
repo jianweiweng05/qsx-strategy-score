@@ -260,6 +260,23 @@ def test_supported_languages_have_complete_core_messages():
         assert not (base - set(MESSAGES[lang])), lang
 
 
+def test_filename_resolves_asset_for_low_frequency_log():
+    # A sparse / low-frequency series (e.g. a 46-trade log) can't be correlation-
+    # confirmed against daily K-lines. The filename is then the best signal and
+    # must AUTO-resolve (gate accepts high/medium), not get stuck at "low / add
+    # the asset" — that was a real regression on TradingView/LuxAlgo BTC logs.
+    from qsx_strategy_score import assets as _assets
+    from qsx_strategy_score.asset_library import detect_asset
+    if "BTC" not in _assets.available_keys():
+        pytest.skip("asset price library not present locally")
+    idx = pd.to_datetime(["2021-01-05", "2021-06-10", "2022-02-01",
+                          "2023-08-15", "2024-03-20", "2025-01-09"])
+    r = pd.Series([0.10, -0.05, 0.20, 0.03, -0.10, 0.08], index=idx)
+    det = detect_asset(r, filename="LuxAlgo_BINANCE_BTCUSDT.P.csv")
+    assert det.best is not None and det.best.key == "BTC"
+    assert det.confidence in ("high", "medium")  # gate-acceptable
+
+
 def test_spx_filename_resolves_to_index_not_spy_etf():
     assert key_from_filename("SPX_strategy_returns.csv") == "SPX"
     assert key_from_filename("SPY_strategy_returns.csv") == "SPY"

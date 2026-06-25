@@ -221,9 +221,21 @@ def detect_asset(returns: pd.Series, filename: Optional[str] = None, *,
         else:
             a = _assets.ASSET_BY_KEY[fname_key]
             best = AssetMatch(a.key, a.name, a.asset_class, via="filename")
-            conf = "medium" if strat_daily is None else "low"
-            reason = (f"filename says {fname_key}; not enough overlap to confirm by correlation. "
-                      "Confirm or pick another.")
+            # A sparse / low-frequency series (e.g. a trade log) cannot be
+            # correlation-confirmed against daily K-lines — the filename is then
+            # the best available signal, so trust it (low-frequency strategies are
+            # normal). Only stay "low" when correlation WAS informative (some asset
+            # ranked with real daily overlap) yet the named asset still didn't
+            # surface — that is genuinely suspicious.
+            corr_informative = bool(ranked) and ranked[0].overlap >= 30
+            conf = "low" if corr_informative else "medium"
+            reason = (
+                f"filename says {fname_key}; its correlation is too weak to confirm — "
+                "confirm or pick another."
+                if corr_informative else
+                f"filename says {fname_key}; a low-frequency / sparse strategy can't be "
+                "correlation-confirmed, so using the filename (change it if that's wrong)."
+            )
     else:
         best = AssetMatch(top.key, top.name, top.asset_class, top.corr, top.overlap, via="correlation")
         if top.abscorr >= 0.60 and margin >= 0.10:
