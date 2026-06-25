@@ -47,8 +47,9 @@ ISSUE_ADVICE = {
             "zh": "积累更多观测或拉长回测区间（争取 1 年以上），再重测。"}},
     "LOW_FREQUENCY": {
         "problem": {
-            "en": "Low-frequency / event strategy — few trades by design, not a sample defect.",
-            "zh": "低频 / 事件型策略——交易笔数少是设计使然，不是样本缺陷。"},
+            "en": "Low-frequency / event strategy — few trades by design, not a sample defect. "
+                  "Still, the trade count is small, so the score is indicative — analyze further before relying on it.",
+            "zh": "低频 / 事件型策略——交易笔数少是设计使然，不是样本缺陷。但成交数偏少，分数仅供参考，建议进一步分析后再依赖。"},
         "direction": {
             "en": "Scored on the events you have, as an event-track read. More independent events "
                   "across different markets over time will firm it up.",
