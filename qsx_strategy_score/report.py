@@ -76,7 +76,10 @@ def _maybe_cjk_font(plt, *texts) -> None:
     if has_hangul:
         candidates = (
             "Apple SD Gothic Neo", "Nanum Gothic", "AppleGothic", "Arial Unicode MS",
-            "Noto Sans CJK KR", "Noto Sans CJK SC", "Microsoft YaHei", "SimHei",
+            # Noto Sans CJK is pan-CJK (every face carries full Hangul); on Linux
+            # (Debian) matplotlib enumerates only the JP face, so without it Korean
+            # renders as tofu boxes on a server.
+            "Noto Sans CJK KR", "Noto Sans CJK JP", "Noto Sans CJK SC", "Microsoft YaHei", "SimHei",
         )
     elif has_kana:
         candidates = (
@@ -805,7 +808,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "FORWARD_LOOKING_INPUT": "未来データの疑い。",
                 "NEGATIVE_RETURN": "全期間で非収益。",
                 "INSUFFICIENT_SAMPLE": "観測数が不足。",
-                "LOW_FREQUENCY": "低頻度イベント型。",
+                "LOW_FREQUENCY": "低頻度戦略——取引数が少なく、追加分析を推奨。",
                 "BACKGROUND_REQUIRED": "リターン規模が異常。",
                 "OOS_NEGATIVE_RETURN": "OOSで損失。",
                 "UNDERPERFORMS_HOLD_RISKADJ": "Buy & hold未満。",
@@ -824,7 +827,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "FORWARD_LOOKING_INPUT": "미래 데이터 의심.",
                 "NEGATIVE_RETURN": "전체 구간 비수익.",
                 "INSUFFICIENT_SAMPLE": "관측치 부족.",
-                "LOW_FREQUENCY": "저빈도 이벤트형.",
+                "LOW_FREQUENCY": "저빈도 전략 — 거래 수가 적어 추가 분석 권장.",
                 "BACKGROUND_REQUIRED": "수익 규모가 비정상적.",
                 "OOS_NEGATIVE_RETURN": "OOS 손실.",
                 "UNDERPERFORMS_HOLD_RISKADJ": "Buy & hold 미달.",
@@ -843,7 +846,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "FORWARD_LOOKING_INPUT": "Posible dato futuro.",
                 "NEGATIVE_RETURN": "No rentable.",
                 "INSUFFICIENT_SAMPLE": "Muestra insuficiente.",
-                "LOW_FREQUENCY": "Baja frecuencia.",
+                "LOW_FREQUENCY": "Baja frecuencia — pocas operaciones; conviene analizar más.",
                 "BACKGROUND_REQUIRED": "Retorno inusualmente grande.",
                 "OOS_NEGATIVE_RETURN": "Pierde fuera de muestra.",
                 "UNDERPERFORMS_HOLD_RISKADJ": "No supera buy-and-hold.",
@@ -862,7 +865,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "FORWARD_LOOKING_INPUT": "Possível dado futuro.",
                 "NEGATIVE_RETURN": "Não lucrativo.",
                 "INSUFFICIENT_SAMPLE": "Amostra insuficiente.",
-                "LOW_FREQUENCY": "Baixa frequência.",
+                "LOW_FREQUENCY": "Baixa frequência — poucas operações; analise mais a fundo.",
                 "BACKGROUND_REQUIRED": "Retorno incomum.",
                 "OOS_NEGATIVE_RETURN": "Perde fora da amostra.",
                 "UNDERPERFORMS_HOLD_RISKADJ": "Não supera buy-and-hold.",
