@@ -87,7 +87,12 @@ def _maybe_cjk_font(plt, *texts) -> None:
     else:
         candidates = (
             "PingFang SC", "PingFang HK", "Heiti SC", "Heiti TC", "Songti SC",
-            "STHeiti", "Arial Unicode MS", "Noto Sans CJK SC", "Microsoft YaHei", "SimHei",
+            "STHeiti", "Arial Unicode MS",
+            # Linux (Debian fonts-noto-cjk): matplotlib enumerates only the JP face
+            # of the .ttc, which still covers ~all simplified glyphs — without it a
+            # Linux server renders Chinese as tofu boxes.
+            "Noto Sans CJK SC", "Noto Sans CJK JP", "Noto Sans CJK TC",
+            "Microsoft YaHei", "SimHei",
         )
     _set_first_available(candidates)
 
