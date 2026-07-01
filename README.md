@@ -147,6 +147,7 @@ CSV, TSV, Excel, TradingView-style exports, return series, equity curves, and cl
 
 ## Docs
 
+- [Case studies: three backtests, three verdicts](docs/case-studies.md)
 - [Scoring model](docs/scoring.md)
 - [QSX Overlay Preview](docs/overlay.md)
 - [Privacy boundary](docs/privacy.md)
