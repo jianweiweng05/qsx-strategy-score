@@ -14,5 +14,7 @@ reports/
 !assets/
 !assets/readme/
 !assets/readme/*.png
+!assets/casestudy/
+!assets/casestudy/*.png
 *.json
 .DS_Store
