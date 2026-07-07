@@ -1,10 +1,14 @@
 """Bundled asset library: daily OHLC for mainstream assets, used ONLY to
 power the 'skill vs luck' dimension (benchmark + random-control) of the scorer.
 
-Two free, no-account, no-apikey sources (verified reachable):
+Two free, no-account, no-apikey sources:
   * crypto            -> Binance public klines  (api.binance.com/api/v3/klines)
-  * US equities/ETFs  -> Yahoo v8 chart         (query1.finance.yahoo.com)
+  * US equities/ETFs  -> Yahoo v8 chart         (query1/query2.finance.yahoo.com)
   * futures/indices   -> Yahoo (^GSPC, GC=F, ...)
+
+Yahoo's chart endpoint is undocumented and can reject unauthenticated requests
+with 401/403 or a `chart.error` JSON body. Refresh errors are surfaced in the
+asset manifest so users can distinguish upstream blocking from real missing data.
 
 The data is pulled with the stdlib only (urllib + json) — NOT yfinance, which is
 fragile and currently broken in this env. Pulls are incremental: a refresh only
@@ -23,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -35,6 +40,7 @@ import pandas as pd
 _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) qsx-score/0.1"
 BINANCE_KLINES = "https://api.binance.com/api/v3/klines"
 YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+YAHOO_CHART_FALLBACK = "https://query2.finance.yahoo.com/v8/finance/chart/{sym}"
 _CRYPTO_FLOOR_MS = 1_388_534_400_000  # 2014-01-01: don't ask Binance before this
 
 
@@ -183,9 +189,27 @@ def _http_json(url: str, timeout: float = 25.0, retries: int = 2):
     last = None
     for attempt in range(retries + 1):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": _UA})
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": _UA,
+                    "Accept": "application/json,text/plain,*/*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")[:500]
+            except Exception:  # noqa: BLE001
+                body = ""
+            last = f"HTTP {e.code} {e.reason or ''}".strip()
+            if body:
+                last = f"{last}: {body}"
+            if attempt < retries:
+                time.sleep(0.8 * (attempt + 1))
         except Exception as e:  # noqa: BLE001
             last = e
             if attempt < retries:
@@ -228,13 +252,39 @@ def fetch_binance(symbol: str, start_ms: int) -> pd.DataFrame:
     return df
 
 
+def _yahoo_chart_result(payload: dict, symbol: str, host: str) -> list:
+    chart = (payload.get("chart") or {}) if isinstance(payload, dict) else {}
+    err = chart.get("error")
+    if err:
+        code = err.get("code") or "error"
+        desc = err.get("description") or err.get("message") or "no description"
+        raise RuntimeError(f"Yahoo chart error for {symbol} via {host}: {code}: {desc}")
+    if chart.get("result") is None:
+        raise RuntimeError(
+            f"Yahoo chart returned no result for {symbol} via {host}; "
+            "Yahoo may be blocking unauthenticated chart requests or requiring a fresh cookie/crumb."
+        )
+    return chart.get("result") or []
+
+
 def fetch_yahoo(symbol: str, start_s: int) -> pd.DataFrame:
     sym = urllib.parse.quote(symbol, safe="")
     p1 = max(int(start_s), 0)
-    url = (YAHOO_CHART.format(sym=sym)
-           + f"?period1={p1}&period2={int(time.time())}&interval=1d")
-    j = _http_json(url)
-    res = (j.get("chart", {}) or {}).get("result") or []
+    errors = []
+    res = []
+    for template in (YAHOO_CHART, YAHOO_CHART_FALLBACK):
+        host = urllib.parse.urlparse(template).netloc
+        url = (template.format(sym=sym)
+               + f"?period1={p1}&period2={int(time.time())}&interval=1d")
+        try:
+            j = _http_json(url)
+            res = _yahoo_chart_result(j, symbol, host)
+            break
+        except Exception as e:  # noqa: BLE001
+            errors.append(str(e))
+    else:
+        joined = " | ".join(errors)
+        raise RuntimeError(f"Yahoo chart fetch failed for {symbol}: {joined}")
     if not res:
         return _empty_ohlcv()
     res = res[0]

@@ -106,6 +106,33 @@ def test_overlay_trade_log_rejects_overlapping_positions():
         trade_log_to_daily_overlay_returns(io.StringIO(df.to_csv(index=False)), filename="BTC_overlap.csv")
 
 
+def test_overlay_trade_log_allows_same_day_handoffs():
+    df = pd.DataFrame({
+        "entry_time": ["2024-01-01", "2024-01-10", "2024-02-01"],
+        "exit_time": ["2024-01-10", "2024-01-20", "2024-02-05"],
+        "pnl_pct": [4.0, 2.0, 3.0],
+        "symbol": ["BTC"] * 3,
+    })
+
+    daily = trade_log_to_daily_overlay_returns(io.StringIO(df.to_csv(index=False)), filename="BTC_handoff.csv")
+
+    assert daily.index[0] == pd.Timestamp("2024-01-01")
+    assert daily.index[-1] == pd.Timestamp("2024-02-05")
+    assert len(daily) == 36
+
+
+def test_overlay_trade_log_rejects_intraday_overlap():
+    df = pd.DataFrame({
+        "entry_time": ["2024-01-01 09:00", "2024-01-10 10:00", "2024-02-01 09:00"],
+        "exit_time": ["2024-01-10 16:00", "2024-01-20 16:00", "2024-02-05 16:00"],
+        "pnl_pct": [4.0, 2.0, 3.0],
+        "symbol": ["BTC"] * 3,
+    })
+
+    with pytest.raises(OverlayPreviewError, match="overlapping positions"):
+        trade_log_to_daily_overlay_returns(io.StringIO(df.to_csv(index=False)), filename="BTC_intraday_overlap.csv")
+
+
 def test_loader_accepts_raw_tradingview_multisheet_xlsx(tmp_path):
     path = tmp_path / "TradingView_LuxAlgo_CN.xlsx"
     summary = pd.DataFrame({
@@ -227,6 +254,71 @@ def test_overlay_preview_sends_github_source_header(monkeypatch):
     assert headers["X-qsx-source"] == "github-open-source"
     assert headers["X-qsx-lang"] == "zh"
     assert out["_local"]["normalized_rows"] == 40
+
+
+def test_yahoo_fetch_falls_back_to_query2(monkeypatch):
+    from qsx_strategy_score import assets
+
+    payload = {
+        "chart": {
+            "result": [{
+                "timestamp": [1704067200, 1704153600],
+                "indicators": {
+                    "quote": [{
+                        "open": [100.0, 101.0],
+                        "high": [102.0, 103.0],
+                        "low": [99.0, 100.0],
+                        "close": [101.0, 102.0],
+                        "volume": [1000, 1100],
+                    }]
+                },
+            }],
+            "error": None,
+        }
+    }
+    calls = []
+
+    def fake_http_json(url, *args, **kwargs):
+        calls.append(url)
+        if "query1.finance.yahoo.com" in url:
+            raise RuntimeError("HTTP 403 Forbidden")
+        return payload
+
+    monkeypatch.setattr(assets, "_http_json", fake_http_json)
+
+    out = assets.fetch_yahoo("SPY", 0)
+
+    assert len(out) == 2
+    assert calls[0].startswith("https://query1.finance.yahoo.com/")
+    assert calls[1].startswith("https://query2.finance.yahoo.com/")
+
+
+def test_yahoo_chart_error_is_reported(monkeypatch):
+    from qsx_strategy_score import assets
+
+    def fake_http_json(url, *args, **kwargs):
+        return {
+            "chart": {
+                "result": None,
+                "error": {
+                    "code": "Unauthorized",
+                    "description": "Invalid crumb",
+                },
+            }
+        }
+
+    monkeypatch.setattr(assets, "_http_json", fake_http_json)
+
+    with pytest.raises(RuntimeError, match="Yahoo chart fetch failed for SPY"):
+        assets.fetch_yahoo("SPY", 0)
+
+
+def test_profile_docs_do_not_ship_dead_calmar_anchor():
+    from qsx_strategy_score.profiles import PROFILES
+
+    for profile in PROFILES.values():
+        assert "calmar50" not in profile
+        assert "sortino50" in profile
 
 
 def test_cli_multilingual_json(tmp_path):

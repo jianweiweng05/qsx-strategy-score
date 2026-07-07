@@ -95,13 +95,13 @@ def _round_trips_from_tv_event_log(df: pd.DataFrame, tl: dict) -> pd.DataFrame |
 
 def _reject_overlapping_trade_windows(work: pd.DataFrame) -> None:
     intervals = [
-        (pd.Timestamp(row.entry).normalize(), pd.Timestamp(row.exit).normalize())
+        (pd.Timestamp(row.entry), pd.Timestamp(row.exit))
         for row in work[["entry", "exit"]].itertuples(index=False)
     ]
     intervals.sort(key=lambda item: (item[0], item[1]))
     latest_end = intervals[0][1]
     for start_day, end_day in intervals[1:]:
-        if start_day <= latest_end:
+        if start_day < latest_end:
             raise OverlayPreviewError(
                 "Trade-log Overlay Preview does not support overlapping positions. "
                 "Upload an equity curve or daily return series so the preview uses "
