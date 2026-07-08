@@ -6,8 +6,9 @@
 
 Free open-source strategy auditor for trading backtests.
 
-Public preview: usable now as a local CLI and Streamlit app. Scoring thresholds and the hosted Overlay Preview may still change before v1.0.
+Now available as a completely free Chrome extension, plus a local CLI and Streamlit app. Scoring thresholds and the hosted Overlay Preview may still change before v1.0.
 
+[Install the free Chrome extension](https://chromewebstore.google.com/detail/qsx-strategy-score/ledfoflekcjogmfnmomcnlkinfpblgck) ·
 [Try without installing](https://www.quantscopex.com/tools?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=hosted_tool) ·
 [Free TradingView indicator](https://www.tradingview.com/script/nY7jGyZu/) ·
 [Run Overlay Preview](https://www.quantscopex.com/tools?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=overlay) ·
@@ -23,9 +24,16 @@ Upload a return curve, equity curve, or trade log. Get a fast **QSX Score** from
 - Monte Carlo stress test
 - Shareable PNG scorecard
 - Localized CLI, PNG scorecard, and web output (`en`, `zh`, `ja`, `ko`, `es`, `pt-BR`)
+- Free Chrome extension
 - Optional QSX Overlay Preview
 
 Many strategies with a positive edge still fail because of poor risk sizing and exposure control. The optional Overlay Preview lets you test whether dynamic risk sizing may improve your own strategy.
+
+## Free Chrome Extension
+
+QSX Strategy Score is now available on the Chrome Web Store: [install the free Chrome extension](https://chromewebstore.google.com/detail/qsx-strategy-score/ledfoflekcjogmfnmomcnlkinfpblgck).
+
+The extension is completely free. It lets you upload strategy exports, return curves, equity curves, or closed-trade logs directly from Chrome and get the same QSX screening score, diagnostics, and benchmark checks without setting up Python.
 
 ## Free TradingView Indicator
 
