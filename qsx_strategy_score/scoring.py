@@ -509,7 +509,7 @@ EDGE_BENCH_MATCH = 50.0      # below this (but >=LOST) = roughly matched -> marg
 _DISPLAY_KNOTS_PASS = [(0.0, 40.0), (35.0, 60.0), (55.0, 80.0), (70.0, 90.0), (99.0, 100.0)]
 _DISPLAY_KNOTS_FAIL = [(0.0, 0.0), (55.0, 59.0), (99.0, 59.0)]
 GRADE_LABEL = {"GOLD": "GOLD", "SILVER": "SILVER", "BRONZE": "BRONZE",
-               "CAUTION": "NEEDS WORK", "FLAGGED": "FLAGGED"}
+               "PROVISIONAL": "PROVISIONAL", "CAUTION": "NEEDS WORK", "FLAGGED": "FLAGGED"}
 
 
 def _lerp_knots(x: float, knots) -> float:
@@ -561,6 +561,7 @@ class UnifiedReport:
         return _json_safe(dict(
             overall=self.overall, display=self.display, grade=self.grade,
             judgement=self.judgement, tier=self.tier,
+            evidence=self.meta.get("evidence", {}),
             headline=self.headline, lights=self.lights,
             pillars={k: dict(value=_v(s), raw=s.raw) for k, s in self.subscores().items()},
             flags=self.flags, meta=self.meta))
@@ -830,15 +831,63 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
     overall = display                           # internal score == displayed score (one scale)
     judgement = "FLAGGED" if too_good else ("CAUTION" if hard else "OK")
 
-    # --- tier: just the band of the (capped) number, no hidden sub-gates ---
-    tier = None
-    if judgement == "OK":
-        if display >= TIER_GOLD:
-            tier = "GOLD"
-        elif display >= TIER_SILVER:
-            tier = "SILVER"
-        elif display >= TIER_BRONZE:
-            tier = "BRONZE"
+    # --- candidate tier is numeric only; earned tier also needs sufficient evidence ---
+    candidate_tier = None
+    if display >= TIER_GOLD:
+        candidate_tier = "GOLD"
+    elif display >= TIER_SILVER:
+        candidate_tier = "SILVER"
+    elif display >= TIER_BRONZE:
+        candidate_tier = "BRONZE"
+
+    benchmark_available = edge_sub is not None
+    benchmark_comparable = bool(benchmark_available and not benchmark.get("partial", False))
+    random_control_available = rc is not None
+    experience_adequate = not exp
+    evidence_reason_codes = []
+    if not benchmark_available:
+        evidence_reason_codes.append("BENCHMARK_MISSING")
+    elif not benchmark_comparable:
+        evidence_reason_codes.append("BENCHMARK_UNAVAILABLE")
+    if benchmark_available and not random_control_available:
+        evidence_reason_codes.append("RANDOM_CONTROL_UNAVAILABLE")
+    if sample_hard:
+        evidence_reason_codes.append("SAMPLE_TOO_SMALL")
+    if span_years < EXPERIENCE_MIN_YEARS:
+        evidence_reason_codes.append("SHORT_TRACK_RECORD")
+    if eff_n is not None and eff_n < EXPERIENCE_MIN_EFF_N:
+        evidence_reason_codes.append("LOW_EFFECTIVE_SAMPLE")
+    if edge_light in {"marginal", "luck_unclear", "not_evaluated", "hold_only"}:
+        evidence_reason_codes.append("EDGE_NOT_ESTABLISHED")
+
+    metal_tier_eligible = bool(
+        judgement == "OK"
+        and benchmark_comparable
+        and random_control_available
+        and edge_light == "beat"
+        and not sample_hard
+        and experience_adequate
+    )
+    if judgement == "FLAGGED" or hard:
+        evidence_status = "insufficient"
+    elif metal_tier_eligible:
+        evidence_status = "qualified"
+    else:
+        evidence_status = "provisional"
+    evidence = dict(
+        status=evidence_status,
+        reason_codes=evidence_reason_codes,
+        benchmark_available=benchmark_available,
+        benchmark_comparable=benchmark_comparable,
+        random_control_available=random_control_available,
+        sample_adequate=not sample_hard,
+        experience_adequate=experience_adequate,
+        metal_tier_eligible=metal_tier_eligible,
+    )
+
+    # A tier is earned only by a clean, comparable result. The display score remains
+    # useful path-quality information even when the evidence status is provisional.
+    tier = candidate_tier if judgement == "OK" and metal_tier_eligible else None
 
     # --- headline (the protagonist sentence) — bilingual so the site can render the
     # page language without a re-fetch (headline = English, headline_zh = Chinese) ---
@@ -866,19 +915,20 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         headline = "Sample too small — score is provisional; not enough track record to trust."
         headline_zh = "样本太小——结论暂定；历史不足以信任。"
     elif oos is not None and oos["oos_cagr"] <= 0:
-        headline = "Lost money out-of-sample — the in-sample edge did not hold up."
-        headline_zh = "样本外亏钱——样本内的优势没撑住。"
+        headline = "The later 30% window lost money — the earlier result did not persist."
+        headline_zh = "后 30% 时间窗口亏钱——前段表现没有延续。"
     elif edge_light == "beat" and exp:
-        headline = (f"Beat buy & hold and random timing — now prove it over "
+        headline = (f"Passed the available benchmark and proxy random-control checks — now prove it over "
                     f"{EXPERIENCE_MIN_YEARS:.0f}+ years of history.")
-        headline_zh = f"跑赢了买入持有和随机择时——再用 {EXPERIENCE_MIN_YEARS:.0f}+ 年历史证明它。"
+        headline_zh = f"通过当前基准与代理随机对照——还需用 {EXPERIENCE_MIN_YEARS:.0f}+ 年历史验证。"
     elif edge_light == "beat":
         if rand_p is not None:
-            headline = f"Beat buy & hold AND random timing (p={rand_p:.2f}) — a real, demonstrable edge."
-            headline_zh = f"跑赢「买入持有」和「随机择时」（p={rand_p:.2f}）——真实、可验证的优势。"
+            headline = (f"Passed the available benchmark and proxy random-control checks (p={rand_p:.2f}); "
+                        "independent validation is still needed.")
+            headline_zh = f"通过当前基准与代理随机对照（p={rand_p:.2f}）；仍需独立验证。"
         else:
-            headline = "Beat buy & hold on a risk-adjusted basis."
-            headline_zh = "风险调整后跑赢买入持有。"
+            headline = "Beat buy & hold on this risk-adjusted comparison; independent validation is still needed."
+            headline_zh = "在本次风险调整比较中跑赢持有；仍需独立验证。"
     elif edge_light == "hold_only":
         headline = "Beat buy & hold, but random-timing evidence is not available."
         headline_zh = "跑赢买入持有，但随机择时证据不可用。"
@@ -905,6 +955,8 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         low_frequency=bool(is_low_frequency),
         sample_unit=("trades" if meta.get("caliber") == "closed_trade" else "bars"),
         effective_n=(round(float(eff_n), 1) if eff_n is not None else None),
+        candidate_tier=candidate_tier,
+        evidence=evidence,
         uncapped_score=uncapped, capped=bool(capped), cap_reasons=(hard + soft + exp),
         # zh mirror of cap_reasons for push-model clients (e.g. the QuantScopeX
         # bilingual web UI re-renders both languages without re-fetching).
@@ -919,7 +971,13 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         trial_budget_capped=bool(trial_budget is not None
                                  and trial_budget >= metrics.TRIAL_BUDGET_MAX),
     ))
-    grade = (GRADE_LABEL.get(tier) if tier else
-             (GRADE_LABEL["FLAGGED"] if judgement == "FLAGGED" else GRADE_LABEL["CAUTION"]))
+    if judgement == "FLAGGED":
+        grade = GRADE_LABEL["FLAGGED"]
+    elif judgement == "CAUTION":
+        grade = GRADE_LABEL["CAUTION"]
+    elif evidence_status == "provisional":
+        grade = GRADE_LABEL["PROVISIONAL"]
+    else:
+        grade = GRADE_LABEL.get(tier) or GRADE_LABEL["CAUTION"]
     return UnifiedReport(overall, judgement, tier, headline, rq, cred, risk,
                          edge_sub, lights, flags, meta, display=display, grade=grade)

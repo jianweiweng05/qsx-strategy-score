@@ -27,6 +27,16 @@ The score is intentionally conservative. A backtest can have attractive returns 
 - JSON report
 - Shareable PNG scorecard
 
+## Evidence and grades
+
+The 0-100 number is a **path-quality score**, not a certificate that a strategy has alpha.
+
+- `GOLD`, `SILVER`, and `BRONZE` require a comparable asset benchmark, a completed available random-control check, adequate history/sample evidence, and a strategy that passes the available edge checks.
+- `PROVISIONAL` means the return path can still have a useful numeric score, but required evidence such as a benchmark, comparable overlap, random-control result, or sufficient history is incomplete.
+- `NEEDS WORK` and `FLAGGED` remain stronger negative outcomes: a material free check failed or the input needs methodology verification.
+
+See the [calibration policy](calibration.md) for the full eligibility rules and known limits.
+
 ## Sample Scorecards
 
 The README shows the compact overview. The full sample wall below shows four common outcomes: real edge candidate, beta trap, too-clean-to-trust, and benchmark-needed.

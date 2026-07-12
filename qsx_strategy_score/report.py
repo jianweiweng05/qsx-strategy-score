@@ -135,6 +135,8 @@ def _unified_status(report):
         return "\U0001F534", "#d62728", "FLAGGED"
     if report.judgement == "CAUTION":
         return "\U0001F7E0", "#e08214", "NEEDS WORK"
+    if report.grade == "PROVISIONAL":
+        return "\U0001F7E1", "#fbbf24", "PROVISIONAL"
     if report.tier in ("GOLD", "SILVER"):
         return "\U0001F7E2", "#1a9850", "PASS"
     if report.tier == "BRONZE":
@@ -374,29 +376,29 @@ def _sample_phrase(report, lang: str = "en") -> str:
 
 def _png_grade(grade: str, lang: str) -> str:
     if lang == "zh":
-        return {"GOLD": "金牌", "SILVER": "银牌", "BRONZE": "铜牌", "NEEDS WORK": "需改进", "FLAGGED": "存疑"}.get(grade, grade)
+        return {"GOLD": "金牌", "SILVER": "银牌", "BRONZE": "铜牌", "PROVISIONAL": "暂定", "NEEDS WORK": "需改进", "FLAGGED": "存疑"}.get(grade, grade)
     if lang == "ja":
-        return {"GOLD": "ゴールド", "SILVER": "シルバー", "BRONZE": "ブロンズ", "NEEDS WORK": "要改善", "FLAGGED": "要検証"}.get(grade, grade)
+        return {"GOLD": "ゴールド", "SILVER": "シルバー", "BRONZE": "ブロンズ", "PROVISIONAL": "暫定", "NEEDS WORK": "要改善", "FLAGGED": "要検証"}.get(grade, grade)
     if lang == "ko":
-        return {"GOLD": "골드", "SILVER": "실버", "BRONZE": "브론즈", "NEEDS WORK": "개선 필요", "FLAGGED": "검증 필요"}.get(grade, grade)
+        return {"GOLD": "골드", "SILVER": "실버", "BRONZE": "브론즈", "PROVISIONAL": "잠정", "NEEDS WORK": "개선 필요", "FLAGGED": "검증 필요"}.get(grade, grade)
     if lang == "es":
-        return {"GOLD": "Oro", "SILVER": "Plata", "BRONZE": "Bronce", "NEEDS WORK": "Necesita trabajo", "FLAGGED": "Sospechoso"}.get(grade, grade)
+        return {"GOLD": "Oro", "SILVER": "Plata", "BRONZE": "Bronce", "PROVISIONAL": "Provisional", "NEEDS WORK": "Necesita trabajo", "FLAGGED": "Sospechoso"}.get(grade, grade)
     if lang == "pt-BR":
-        return {"GOLD": "Ouro", "SILVER": "Prata", "BRONZE": "Bronze", "NEEDS WORK": "Precisa melhorar", "FLAGGED": "Sinalizado"}.get(grade, grade)
+        return {"GOLD": "Ouro", "SILVER": "Prata", "BRONZE": "Bronze", "PROVISIONAL": "Provisória", "NEEDS WORK": "Precisa melhorar", "FLAGGED": "Sinalizado"}.get(grade, grade)
     return grade
 
 
 def _png_status_word(word: str, lang: str) -> str:
     if lang == "zh":
-        return {"PASS": "通过", "NEEDS WORK": "需改进", "FLAGGED": "存疑", "OK": "可参考"}.get(word, word)
+        return {"PASS": "通过", "PROVISIONAL": "暂定", "NEEDS WORK": "需改进", "FLAGGED": "存疑", "OK": "可参考"}.get(word, word)
     if lang == "ja":
-        return {"PASS": "合格", "NEEDS WORK": "要改善", "FLAGGED": "要検証", "OK": "参考"}.get(word, word)
+        return {"PASS": "合格", "PROVISIONAL": "暫定", "NEEDS WORK": "要改善", "FLAGGED": "要検証", "OK": "参考"}.get(word, word)
     if lang == "ko":
-        return {"PASS": "통과", "NEEDS WORK": "개선 필요", "FLAGGED": "검증 필요", "OK": "참고"}.get(word, word)
+        return {"PASS": "통과", "PROVISIONAL": "잠정", "NEEDS WORK": "개선 필요", "FLAGGED": "검증 필요", "OK": "참고"}.get(word, word)
     if lang == "es":
-        return {"PASS": "Aprobado", "NEEDS WORK": "Mejorar", "FLAGGED": "Sospechoso", "OK": "Revisar"}.get(word, word)
+        return {"PASS": "Aprobado", "PROVISIONAL": "Provisional", "NEEDS WORK": "Mejorar", "FLAGGED": "Sospechoso", "OK": "Revisar"}.get(word, word)
     if lang == "pt-BR":
-        return {"PASS": "Aprovado", "NEEDS WORK": "Melhorar", "FLAGGED": "Sinalizado", "OK": "Revisar"}.get(word, word)
+        return {"PASS": "Aprovado", "PROVISIONAL": "Provisória", "NEEDS WORK": "Melhorar", "FLAGGED": "Sinalizado", "OK": "Revisar"}.get(word, word)
     return word
 
 
@@ -418,6 +420,7 @@ def _png_label(key: str, lang: str) -> str:
             "period": "Period",
             "score_line": "Free strategy scorecard",
             "dependency": "Dependency",
+            "evidence": "Evidence",
             "return_quality": "Return quality",
             "overfit_risk": "Overfit risk",
             "maxdd": "MaxDD",
@@ -447,6 +450,7 @@ def _png_label(key: str, lang: str) -> str:
             "period": "区间",
             "score_line": "免费策略评分卡",
             "dependency": "依赖扫描",
+            "evidence": "证据",
             "return_quality": "收益质量",
             "overfit_risk": "过拟合风险",
             "maxdd": "最大回撤",
@@ -475,6 +479,7 @@ def _png_label(key: str, lang: str) -> str:
             "period": "期間",
             "score_line": "無料戦略スコアカード",
             "dependency": "依存度",
+            "evidence": "証拠",
             "return_quality": "リターン品質",
             "overfit_risk": "過剰最適化リスク",
             "maxdd": "最大DD",
@@ -503,6 +508,7 @@ def _png_label(key: str, lang: str) -> str:
             "period": "기간",
             "score_line": "무료 전략 점수 카드",
             "dependency": "의존도",
+            "evidence": "증거",
             "return_quality": "수익 품질",
             "overfit_risk": "과최적화 리스크",
             "maxdd": "최대낙폭",
@@ -531,6 +537,7 @@ def _png_label(key: str, lang: str) -> str:
             "period": "Periodo",
             "score_line": "Scorecard gratuito",
             "dependency": "Dependencia",
+            "evidence": "Evidencia",
             "return_quality": "Calidad retorno",
             "overfit_risk": "Riesgo sobreajuste",
             "maxdd": "MaxDD",
@@ -559,6 +566,7 @@ def _png_label(key: str, lang: str) -> str:
             "period": "Período",
             "score_line": "Scorecard gratuito",
             "dependency": "Dependência",
+            "evidence": "Evidência",
             "return_quality": "Qualidade retorno",
             "overfit_risk": "Risco sobreajuste",
             "maxdd": "MaxDD",
@@ -656,6 +664,13 @@ def render_unified_text(report, *, lang: str = "en", triage: Optional[dict] = No
         dep_label = dep.get("label_local") or dep.get("label")
         dep_txt = dep_label if dep.get("available") else t("unavailable", lang)
         L.append(f"  {t('dependency_lite', lang):<19} {dep_txt}")
+        evidence = report.meta.get("evidence") or {}
+        L.append(f"  {t('evidence_status', lang):<19} {t('evidence.' + evidence.get('status', 'insufficient'), lang)}")
+        step = triage.get("next_step") or {}
+        if step.get("title"):
+            L.append(f"  {t('next_step', lang):<19} {step['title']}")
+            for ln in textwrap.wrap(step.get("body", ""), width=56):
+                L.append("     " + ln)
     L.append("-" * 64)
     if co["issues"]:
         L.append(f"  {t('what_to_look_at', lang)}:")
@@ -709,6 +724,8 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
     def tone() -> str:
         if report.judgement == "FLAGGED":
             return "#ef4444"
+        if report.grade == "PROVISIONAL":
+            return "#fbbf24"
         if report.grade == "NEEDS WORK":
             return "#f59e0b"
         if report.grade == "BRONZE":
@@ -933,10 +950,13 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
         (edge_label, _short_png_value(edge_text, 24), edge_color),
         (sample_label, _short_png_value(sample_text, 24), sample_color),
         (
-            _png_label("dependency", lang),
-            (triage or {}).get("dependency_lite", {}).get("label_local")
-            or ((triage or {}).get("dependency_lite", {}).get("label") if (triage or {}).get("dependency_lite", {}).get("available") else t("unavailable", lang)),
-            _CARD_AMBER,
+            _png_label("evidence", lang),
+            _short_png_value(
+                ((triage or {}).get("next_step") or {}).get("title")
+                or t("evidence." + (report.meta.get("evidence") or {}).get("status", "insufficient"), lang),
+                24,
+            ),
+            _CARD_AMBER if report.grade == "PROVISIONAL" else _CARD_GREEN,
         ),
     ]
     for i, (label, value, color) in enumerate(checks):

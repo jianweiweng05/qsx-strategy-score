@@ -4,16 +4,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9--3.12-blue.svg)](pyproject.toml)
 
-Free open-source strategy auditor for trading backtests.
+Free open-source backtest screener for trading strategies.
 
-Now available as a completely free Chrome extension, plus a local CLI and Streamlit app. Scoring thresholds and the hosted Overlay Preview may still change before v1.0.
+Upload a return curve, equity curve, or trade log. In a few minutes, see whether the path looks more like alpha, market beta, luck, or a backtest that needs more evidence — without creating an account.
 
-[Install the free Chrome extension](https://chromewebstore.google.com/detail/qsx-strategy-score/ledfoflekcjogmfnmomcnlkinfpblgck) ·
-[Try without installing](https://www.quantscopex.com/tools?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=hosted_tool) ·
-[Free TradingView indicator](https://www.tradingview.com/script/nY7jGyZu/) ·
-[Run Overlay Preview](https://www.quantscopex.com/tools?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=overlay) ·
-[Full audit report](https://www.quantscopex.com/report?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=audit_report) ·
-[Security](SECURITY.md)
+[**Try the free strategy scorecard**](https://www.quantscopex.com/tools?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=hero_scorecard)
+
+Other ways to use it: [install the free Chrome extension](https://chromewebstore.google.com/detail/qsx-strategy-score/ledfoflekcjogmfnmomcnlkinfpblgck) · [run it locally](#install-and-run) · [free TradingView indicator](https://www.tradingview.com/script/nY7jGyZu/) · [Overlay Preview](https://www.quantscopex.com/tools?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=overlay) · [full audit report](https://www.quantscopex.com/report?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=audit_report) · [security](SECURITY.md)
+
+Scoring thresholds and hosted components may still change before v1.0.
 
 Upload a return curve, equity curve, or trade log. Get a fast **QSX Score** from 0 to 100, plus the checks that usually decide whether a backtest is worth more research.
 
@@ -55,7 +54,17 @@ Use QuantStats when you want a detailed performance tear sheet. Use QSX Strategy
 Is this backtest worth deeper due diligence, or does it look fragile, lucky, overfit, or mostly beta?
 ```
 
-The output is intentionally compact: one score, the main failure modes, a shareable scorecard, and an optional QSX Overlay Preview.
+The output is intentionally compact: one path-quality score, evidence status, the main failure modes, a shareable scorecard, and an optional QSX Overlay Preview.
+
+## How grades work
+
+The 0-100 number describes the uploaded path. It does **not** prove real alpha or production readiness.
+
+- `PROVISIONAL` means the path may look promising, but benchmark, random-control, sample, or track-record evidence is still incomplete.
+- `GOLD`, `SILVER`, and `BRONZE` require comparable benchmark evidence and passed available free checks.
+- `NEEDS WORK` and `FLAGGED` indicate a material weakness or a backtest that should be verified before trusting its score.
+
+Read the [calibration policy](docs/calibration.md) and [release governance](docs/release-governance.md) for the exact boundaries and version policy.
 
 Scorecards link to a full audit-report workflow at `quantscopex.com/report` for users who want deeper due diligence after screening.
 
@@ -165,6 +174,8 @@ CSV, TSV, Excel, TradingView-style exports, return series, equity curves, and cl
 ## Docs
 
 - [Scoring model](docs/scoring.md)
+- [Calibration policy](docs/calibration.md)
+- [Release governance](docs/release-governance.md)
 - [QSX Overlay Preview](docs/overlay.md)
 - [Privacy boundary](docs/privacy.md)
 - [Security policy](SECURITY.md)

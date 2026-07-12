@@ -34,13 +34,65 @@ def test_score_unified_and_triage_on_sample_returns():
     triage = build_triage_diagnostics(r, report, meta=meta).to_dict()
 
     assert 0 <= report.display <= 99.9
-    assert report.grade in {"GOLD", "SILVER", "BRONZE", "NEEDS WORK", "FLAGGED"}
-    assert "edge_persistence" in triage
+    assert report.grade in {"GOLD", "SILVER", "BRONZE", "PROVISIONAL", "NEEDS WORK", "FLAGGED"}
+    assert "evidence" in report.meta
+    assert "next_step" in triage
     assert "evidence_confidence" in triage
     assert "pro_unlock_map" in triage
 
 
-def test_trade_log_dependency_scan_is_available():
+
+def test_unbenchmarked_high_path_score_is_provisional():
+    r, meta = load_returns(ROOT / "examples" / "sample_returns.csv")
+    report = score_unified(r, "other", meta=meta)
+    triage = build_triage_diagnostics(r, report, meta=meta).to_dict()
+
+    assert report.display >= 80
+    assert report.grade == "PROVISIONAL"
+    assert report.tier is None
+    assert report.meta["candidate_tier"] in {"SILVER", "GOLD"}
+    assert "BENCHMARK_MISSING" in report.meta["evidence"]["reason_codes"]
+    assert report.to_dict()["evidence"]["status"] == "provisional"
+    assert triage["next_step"]["route"] == "collect_evidence"
+    assert triage["next_step"]["primary_action"]["id"] == "add_benchmark"
+
+
+def test_qualified_benchmarked_result_can_earn_metal_tier():
+    from qsx_strategy_score.asset_library import asset_close
+
+    r, meta = load_returns(ROOT / "examples" / "strategy_alpha.csv")
+    bench = benchmark_compare(r, asset_close("ETH"))
+    report = score_unified(r, "crypto", meta=meta, benchmark=bench)
+
+    assert report.meta["evidence"]["status"] == "qualified"
+    assert report.grade in {"GOLD", "SILVER", "BRONZE"}
+    assert report.tier == report.meta["candidate_tier"]
+
+
+def test_hard_failure_outranks_provisional_status(tmp_path):
+    path = tmp_path / "BTC_leaky_future_ma.csv"
+    pd.DataFrame({
+        "date": pd.date_range("2020-01-01", periods=400, freq="D"),
+        "return": np.tile([0.02, -0.001, 0.015, 0.0], 100),
+    }).to_csv(path, index=False)
+    r, meta = load_returns(path)
+    report = score_unified(r, "crypto", meta=meta)
+
+    assert report.grade in {"NEEDS WORK", "FLAGGED"}
+    assert report.meta["evidence"]["status"] == "insufficient"
+
+
+def test_triage_routes_qualified_risk_result_to_overlay():
+    from qsx_strategy_score.asset_library import asset_close
+
+    r, meta = load_returns(ROOT / "examples" / "strategy_alpha.csv")
+    bench = benchmark_compare(r, asset_close("ETH"))
+    report = score_unified(r, "crypto", meta=meta, benchmark=bench)
+    triage = build_triage_diagnostics(r, report, meta=meta, benchmark=bench).to_dict()
+
+    assert triage["next_step"]["route"] in {"overlay", "pro"}
+    assert triage["next_step"]["primary_action"]["id"] in {"open_overlay", "open_pro"}
+
     df = pd.DataFrame({
         "entry_time": pd.date_range("2021-01-01", periods=80, freq="5D"),
         "exit_time": pd.date_range("2021-01-03", periods=80, freq="5D"),

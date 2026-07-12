@@ -22,6 +22,7 @@ class TriageDiagnostics:
     evidence_confidence: dict
     dependency_lite: dict
     pro_unlock_map: dict
+    next_step: dict
 
     def to_dict(self) -> dict:
         return {
@@ -29,6 +30,7 @@ class TriageDiagnostics:
             "evidence_confidence": self.evidence_confidence,
             "dependency_lite": self.dependency_lite,
             "pro_unlock_map": self.pro_unlock_map,
+            "next_step": self.next_step,
         }
 
 
@@ -251,6 +253,42 @@ def pro_unlock_map(meta: Optional[dict] = None, *, dependency_available: bool = 
     }
 
 
+def next_step(report, *, lang: str = "en") -> dict:
+    """Choose one user action from the score engine's evidence state."""
+    evidence = dict(getattr(report, "meta", {}).get("evidence") or {})
+    status = evidence.get("status", "insufficient")
+    reasons = list(evidence.get("reason_codes") or [])
+    if status != "qualified":
+        return {
+            "route": "collect_evidence",
+            "reason_codes": reasons,
+            "primary_action": {"id": "add_benchmark", "label": t("next_step.collect_evidence", lang)},
+            "secondary_action": None,
+            "title": t("next_step.collect_evidence_title", lang),
+            "body": t("next_step.collect_evidence_body", lang),
+        }
+
+    mdd = abs(float(getattr(report, "risk", None).raw.get("mdd", 0.0)))
+    if mdd >= 0.25 or float(getattr(report, "risk", None).value or 0.0) < 80:
+        return {
+            "route": "overlay",
+            "reason_codes": ["RISK_PATH_NEEDS_REVIEW"],
+            "primary_action": {"id": "open_overlay", "label": t("next_step.overlay", lang)},
+            "secondary_action": {"id": "open_pro", "label": t("next_step.pro", lang)},
+            "title": t("next_step.overlay_title", lang),
+            "body": t("next_step.overlay_body", lang),
+        }
+
+    return {
+        "route": "pro",
+        "reason_codes": ["FREE_SCREENING_COMPLETE"],
+        "primary_action": {"id": "open_pro", "label": t("next_step.pro", lang)},
+        "secondary_action": {"id": "open_overlay", "label": t("next_step.overlay", lang)},
+        "title": t("next_step.pro_title", lang),
+        "body": t("next_step.pro_body", lang),
+    }
+
+
 def build_triage_diagnostics(returns: pd.Series, report, meta: Optional[dict] = None,
                              benchmark: Optional[dict] = None, *, lang: str = "en") -> TriageDiagnostics:
     ppy = float((meta or {}).get("ppy") or getattr(report, "meta", {}).get("ppy") or 252.0)
@@ -263,4 +301,4 @@ def build_triage_diagnostics(returns: pd.Series, report, meta: Optional[dict] = 
         benchmark_available=benchmark is not None,
         lang=lang,
     )
-    return TriageDiagnostics(ep, ev, dep, unlocks)
+    return TriageDiagnostics(ep, ev, dep, unlocks, next_step(report, lang=lang))

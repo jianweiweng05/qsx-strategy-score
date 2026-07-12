@@ -15,4 +15,5 @@ reports/
 !assets/readme/
 !assets/readme/*.png
 *.json
+.claude/launch.json
 .DS_Store

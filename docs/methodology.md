@@ -5,7 +5,7 @@ QSX Strategy Score is a screening tool, not proof that a strategy is production-
 It can identify common warning signs from the performance path:
 
 - Weak or missing edge against buy-and-hold
-- Failure against random timing controls
+- Proxy random-control checks when an appropriate benchmark is available
 - Excessive drawdown
 - Suspiciously smooth or too-good-to-be-true curves
 - Return concentration
@@ -13,7 +13,7 @@ It can identify common warning signs from the performance path:
 - High benchmark dependency
 - Weak recent persistence
 
-It cannot prove that a backtest has no look-ahead bias, survivorship bias, hidden parameter search, unrealistic fills, missing fees, leverage issues, or capacity limits.
+It cannot prove that a backtest has no look-ahead bias, survivorship bias, hidden parameter search, unrealistic fills, missing fees, leverage issues, or capacity limits. Its chronological 70/30 split is only a later-window check on the uploaded path, not independent walk-forward validation.
 
 ## Recommended Use
 

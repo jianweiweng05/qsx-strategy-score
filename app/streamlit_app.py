@@ -588,11 +588,11 @@ COPY = {
 
 GRADE_LOCAL = {
     "en": {},
-    "zh": {"GOLD": "金牌", "SILVER": "银牌", "BRONZE": "铜牌", "NEEDS WORK": "需改进", "FLAGGED": "存疑"},
-    "ja": {"GOLD": "ゴールド", "SILVER": "シルバー", "BRONZE": "ブロンズ", "NEEDS WORK": "要改善", "FLAGGED": "要検証"},
-    "ko": {"GOLD": "골드", "SILVER": "실버", "BRONZE": "브론즈", "NEEDS WORK": "개선 필요", "FLAGGED": "검증 필요"},
-    "es": {"GOLD": "Oro", "SILVER": "Plata", "BRONZE": "Bronce", "NEEDS WORK": "Necesita trabajo", "FLAGGED": "Sospechoso"},
-    "pt-BR": {"GOLD": "Ouro", "SILVER": "Prata", "BRONZE": "Bronze", "NEEDS WORK": "Precisa melhorar", "FLAGGED": "Sinalizado"},
+    "zh": {"GOLD": "金牌", "SILVER": "银牌", "BRONZE": "铜牌", "PROVISIONAL": "暂定", "NEEDS WORK": "需改进", "FLAGGED": "存疑"},
+    "ja": {"GOLD": "ゴールド", "SILVER": "シルバー", "BRONZE": "ブロンズ", "PROVISIONAL": "暫定", "NEEDS WORK": "要改善", "FLAGGED": "要検証"},
+    "ko": {"GOLD": "골드", "SILVER": "실버", "BRONZE": "브론즈", "PROVISIONAL": "잠정", "NEEDS WORK": "개선 필요", "FLAGGED": "검증 필요"},
+    "es": {"GOLD": "Oro", "SILVER": "Plata", "BRONZE": "Bronce", "PROVISIONAL": "Provisional", "NEEDS WORK": "Necesita trabajo", "FLAGGED": "Sospechoso"},
+    "pt-BR": {"GOLD": "Ouro", "SILVER": "Prata", "BRONZE": "Bronze", "PROVISIONAL": "Provisória", "NEEDS WORK": "Precisa melhorar", "FLAGGED": "Sinalizado"},
 }
 
 FUNNEL_COPY = {
@@ -1690,13 +1690,19 @@ def main() -> None:
     if report.meta.get("capped"):
         cap = f"<div class='qsx-light'><span class='qsx-dot amber'></span>{tr('cap_prefix', lang)}: {report.display:.0f}</div>"
 
+    evidence = report.meta.get("evidence") or {}
+    evidence_status = evidence.get("status", "insufficient")
+    evidence_label = t(f"evidence.{evidence_status}", lang)
+    next_step = triage.get("next_step") or {}
+    evidence_reasons = ", ".join(evidence.get("reason_codes") or [])
     st.markdown(
         f"""
         <div class="qsx-result-card">
           <div class="qsx-result-kicker">{ft("results_title", lang)}</div>
           <div class="qsx-result-title">{escape(local_headline(report, lang))}</div>
           <div class="qsx-muted">{ft("results_subtitle", lang)}</div>
-          <div class="qsx-small" style="margin-top:10px;">{escape(asset_note)}</div>
+          <div class="qsx-small" style="margin-top:10px;">{tr("evidence_status", lang)}: <strong>{escape(evidence_label)}</strong>{(" · " + escape(evidence_reasons.replace("_", " ").lower())) if evidence_reasons else ""}</div>
+          <div class="qsx-small" style="margin-top:6px;">{escape(asset_note)}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1851,16 +1857,32 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
+    route = next_step.get("route", "collect_evidence")
     st.markdown(
         f"""
-        <div class="qsx-overlay">
-          <div class="qsx-pro-title">{ft("overlay_question", lang)}</div>
-          <div class="qsx-pro-body">{ft("overlay_hint", lang)}</div>
+        <div class="qsx-result-card">
+          <div class="qsx-section-title">{escape(next_step.get("title") or tr("next_step", lang))}</div>
+          <div class="qsx-muted">{escape(next_step.get("body") or "")}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    render_overlay_preview(r, lang, upload=up, meta=meta, intro=False, button_label=ft("overlay_primary", lang))
+    if route == "collect_evidence":
+        st.info(next_step.get("body") or tr("next_step.collect_evidence_body", lang))
+    elif route == "overlay":
+        render_overlay_preview(r, lang, upload=up, meta=meta, intro=False,
+                               button_label=(next_step.get("primary_action") or {}).get("label"))
+        if (next_step.get("secondary_action") or {}).get("id") == "open_pro":
+            st.link_button((next_step["secondary_action"]).get("label"),
+                           "https://www.quantscopex.com/report?utm_source=free_score&utm_medium=result&utm_campaign=evidence_aware&utm_content=overlay_secondary",
+                           use_container_width=True)
+    else:
+        st.link_button((next_step.get("primary_action") or {}).get("label", tr("next_step.pro", lang)),
+                       "https://www.quantscopex.com/report?utm_source=free_score&utm_medium=result&utm_campaign=evidence_aware&utm_content=pro",
+                       type="primary", use_container_width=True)
+        if (next_step.get("secondary_action") or {}).get("id") == "open_overlay":
+            render_overlay_preview(r, lang, upload=up, meta=meta, intro=False,
+                                   button_label=(next_step["secondary_action"]).get("label"))
 
     with st.expander(tr("raw", lang)):
         raw = report.to_dict()
