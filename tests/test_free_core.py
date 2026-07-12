@@ -58,10 +58,10 @@ def test_unbenchmarked_high_path_score_is_provisional():
 
 
 def test_qualified_benchmarked_result_can_earn_metal_tier():
-    from qsx_strategy_score.asset_library import asset_close
-
     r, meta = load_returns(ROOT / "examples" / "strategy_alpha.csv")
-    bench = benchmark_compare(r, asset_close("ETH"))
+    benchmark_returns = -0.0002 + 0.002 * np.sin(np.linspace(0, 16, len(r)))
+    prices = pd.Series(100 * np.cumprod(1 + benchmark_returns), index=r.index)
+    bench = benchmark_compare(r, prices)
     report = score_unified(r, "crypto", meta=meta, benchmark=bench)
 
     assert report.meta["evidence"]["status"] == "qualified"
@@ -83,10 +83,10 @@ def test_hard_failure_outranks_provisional_status(tmp_path):
 
 
 def test_triage_routes_qualified_risk_result_to_overlay():
-    from qsx_strategy_score.asset_library import asset_close
-
     r, meta = load_returns(ROOT / "examples" / "strategy_alpha.csv")
-    bench = benchmark_compare(r, asset_close("ETH"))
+    benchmark_returns = -0.0002 + 0.002 * np.sin(np.linspace(0, 16, len(r)))
+    prices = pd.Series(100 * np.cumprod(1 + benchmark_returns), index=r.index)
+    bench = benchmark_compare(r, prices)
     report = score_unified(r, "crypto", meta=meta, benchmark=bench)
     triage = build_triage_diagnostics(r, report, meta=meta, benchmark=bench).to_dict()
 
