@@ -16,7 +16,7 @@ from .scoring import score_unified, SubScore, UnifiedReport
 from .coaching import coaching
 from .triage import build_triage_diagnostics, TriageDiagnostics
 
-__version__ = "0.2.0"
+__version__ = "0.2.2"
 
 __all__ = [
     "load_returns",

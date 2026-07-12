@@ -2,6 +2,12 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## v0.2.2 — CI correction
+
+### Fixed
+
+- Made the new qualified-evidence regression fixtures self-contained instead of depending on an optional bundled ETH price library. This restores clean CI installs and allows the release workflow to build the intended `0.2.2` package.
+
 ## v0.2.0 — Evidence-aware screening
 
 ### Changed
