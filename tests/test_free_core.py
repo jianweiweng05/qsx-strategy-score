@@ -24,7 +24,8 @@ from qsx_strategy_score.overlay_client import (
     trade_log_to_daily_overlay_returns,
 )
 from qsx_strategy_score.metrics import benchmark_compare
-from qsx_strategy_score.report import overfit_risk_score, render_unified_png
+from qsx_strategy_score.report import render_unified_png
+from qsx_strategy_score.scoring import overfit_risk_score
 from qsx_strategy_score.report_preflight import preflight_score_upload
 
 
@@ -560,6 +561,12 @@ def test_overfit_risk_display_inverts_positive_credibility_score():
     assert overfit_risk_score(99) == 1
     assert overfit_risk_score(72) == 28
     assert overfit_risk_score(0) == 100
+
+
+def test_report_json_exposes_the_same_overfit_risk_as_the_scorecard():
+    r, meta = load_returns(ROOT / "examples" / "strategy_alpha.csv")
+    report = score_unified(r, "crypto", meta=meta)
+    assert report.to_dict()["overfit_risk"] == round(100 - report.credibility.value, 1)
 
 
 def test_coerce_numeric_series_is_public():

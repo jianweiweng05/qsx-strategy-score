@@ -15,6 +15,7 @@ import pandas as pd
 
 from .i18n import has_message, localize_cap_reason, t
 from .metrics import equity_curve
+from .scoring import overfit_risk_score
 
 DISCLAIMER = (
     "This score measures historical backtest QUALITY, not future performance, "
@@ -156,16 +157,6 @@ def _grade_color(v: float) -> str:
     if v >= 60:
         return "#fc8d59"   # orange  — passing-ish (D)
     return "#d73027"       # red     — below passing / alarming (F)
-
-
-def overfit_risk_score(credibility: float) -> float:
-    """Map the positive credibility pillar onto a user-facing risk scale.
-
-    Credibility is intentionally high-is-good because it feeds the unified score.
-    A card labelled "Overfit risk" must use the opposite direction: low is good.
-    This is an ordinal risk index, not a calibrated probability of overfitting.
-    """
-    return max(0.0, min(100.0, 100.0 - float(credibility)))
 
 
 def _risk_color(v: float) -> str:

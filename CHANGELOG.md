@@ -2,6 +2,12 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## v0.2.4 — Unified overfit-risk contract
+
+### Added
+
+- The score JSON now publishes `overfit_risk`, the same low-is-safe ordinal index shown on the shareable scorecard. Hosted clients should use this field instead of reinterpreting the positive `Credibility` pillar.
+
 ## v0.2.3 — Overfit-risk display scale
 
 ### Fixed

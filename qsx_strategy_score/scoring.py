@@ -561,10 +561,21 @@ class UnifiedReport:
         return _json_safe(dict(
             overall=self.overall, display=self.display, grade=self.grade,
             judgement=self.judgement, tier=self.tier,
+            overfit_risk=round(overfit_risk_score(self.credibility.value), 1),
             evidence=self.meta.get("evidence", {}),
             headline=self.headline, lights=self.lights,
             pillars={k: dict(value=_v(s), raw=s.raw) for k, s in self.subscores().items()},
             flags=self.flags, meta=self.meta))
+
+
+def overfit_risk_score(credibility: float) -> float:
+    """Map the positive credibility pillar onto a user-facing risk scale.
+
+    Credibility is intentionally high-is-good because it feeds the unified score.
+    The public overfit-risk index uses the opposite direction: low is good. It is
+    ordinal, not a calibrated probability of overfitting.
+    """
+    return max(0.0, min(100.0, 100.0 - float(credibility)))
 
 
 def _return_quality(r: pd.Series, ppy: float, A: dict) -> SubScore:
