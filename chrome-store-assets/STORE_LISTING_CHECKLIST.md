@@ -5,7 +5,7 @@
 Upload:
 
 ```text
-/Users/admin/free-score/dist/qsx-strategy-score-chrome-v1.0.0.zip
+/Users/admin/free-score/dist/qsx-strategy-score-chrome-v1.1.0.zip
 ```
 
 ## Product Details
@@ -29,14 +29,11 @@ QSX Strategy Score is a free strategy scorecard for traders and quant researcher
 
 Upload a CSV, TSV, TXT, or Excel strategy file and get a fast 0-100 score with practical diagnostics:
 
-- Overfit and credibility checks
-- Return quality and risk-adjusted performance
-- Max drawdown, CVaR, Sharpe, Sortino, Calmar, and CAGR
+- Return quality, drawdown control, and overfit-risk checks
+- A low-is-safer overfit-risk index shared with the QuantScopeX website
+- Risk-adjusted return, buy-and-hold, and random-timing evidence when available
 - Buy-and-hold benchmark comparison when an asset or price/K-line file is available
-- Random-timing edge checks for closed-trade logs
-- Monte Carlo stress evidence
-- Folded diagnostic details so the scorecard stays readable
-- Smart next-step routing to QSX Overlay Preview or Pro Strategy Audit when deeper testing is useful
+- Smart next-step routing to add evidence, QSX Overlay Preview, or Pro Strategy Audit
 
 Supported input shapes include:
 
@@ -148,7 +145,13 @@ The extension uses Chrome storage only to remember user preferences such as API 
 Host permission justification for `https://www.quantscopex.com/*`:
 
 ```text
-The extension sends user-selected strategy files and optional benchmark files to the QSX Strategy Score API so the server can parse the file and return the requested scorecard, diagnostics, charts, and benchmark comparison.
+The extension sends user-selected strategy files and optional benchmark files to the QSX Strategy Score endpoint so the server can return the requested scorecard, evidence status, overfit-risk index, and benchmark comparison.
+```
+
+Host permission justification for `https://www.tradingview.com/*`:
+
+```text
+The extension injects its QSX Strategy Score button and upload dialog only on TradingView pages. It does not read account credentials, cookies, or private messages.
 ```
 
 Privacy policy URL:
@@ -180,7 +183,7 @@ Financial and payment information:
 If Chrome asks whether the extension collects or transmits user-provided content, disclose:
 
 ```text
-Yes. The extension transmits user-selected strategy files and optional benchmark files to https://www.quantscopex.com/api/score only after the user explicitly chooses a file and starts scoring. Files are used to generate the scorecard and diagnostics and are not sold.
+Yes. The extension transmits user-selected strategy files and optional benchmark files to https://www.quantscopex.com/api/score only after the user explicitly chooses a file and starts scoring. Files are used to generate the scorecard, evidence status, overfit-risk index, and benchmark comparison and are not sold.
 ```
 
 Data use certification:
@@ -223,11 +226,17 @@ Free
 3. Upload a CSV, TSV, TXT, or Excel strategy file such as a return series, equity curve, or closed-trade log.
 4. Optionally select a benchmark asset or upload a price/K-line file with date and close/price columns.
 5. Click Score strategy.
-6. The extension displays a 0-100 score, grade, risk pillars, diagnostics, charts, benchmark evidence, and recommended next step.
+6. The extension displays a 0-100 score, grade, return quality, overfit risk, drawdown control, benchmark evidence, and recommended next step.
 ```
 
 Test account:
 
 ```text
 Not required. No login is needed.
+```
+
+## Version 1.1.0 Update Notes
+
+```text
+Version 1.1.0 moves the extension onto the same hosted scoring contract used by the QuantScopeX website. It replaces the legacy API route with the website score endpoint, aligns the displayed overfit-risk scale so lower values indicate lower risk, and adds the TradingView content-script registration required for the in-page score button.
 ```
