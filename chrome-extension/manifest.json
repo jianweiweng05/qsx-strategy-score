@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "QSX Strategy Score",
+  "version": "1.1.0",
+  "description": "Score trading strategy exports in 3 seconds. Overfit detection, drawdown risk, and edge vs random timing.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.quantscopex.com/*",
+    "https://www.tradingview.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.tradingview.com/*"],
+      "js": ["smart-cta.js", "content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
