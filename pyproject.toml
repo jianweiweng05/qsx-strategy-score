@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qsx-score-free"
-version = "0.2.2"
+version = "0.2.3"
 description = "QuantScopeX Strategy Score — an open-source, overfitting-aware strategy scorecard from CSV/TSV/Excel returns, equity, or trade-log uploads."
 readme = "README.md"
 requires-python = ">=3.9"

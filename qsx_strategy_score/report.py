@@ -158,6 +158,25 @@ def _grade_color(v: float) -> str:
     return "#d73027"       # red     — below passing / alarming (F)
 
 
+def overfit_risk_score(credibility: float) -> float:
+    """Map the positive credibility pillar onto a user-facing risk scale.
+
+    Credibility is intentionally high-is-good because it feeds the unified score.
+    A card labelled "Overfit risk" must use the opposite direction: low is good.
+    This is an ordinal risk index, not a calibrated probability of overfitting.
+    """
+    return max(0.0, min(100.0, 100.0 - float(credibility)))
+
+
+def _risk_color(v: float) -> str:
+    """Low risk is green; high risk is red, unlike the grade-scale palette."""
+    if v <= 30:
+        return "#1a9850"
+    if v <= 60:
+        return "#fee08b"
+    return "#d73027"
+
+
 def _edge_phrase(report, lang: str = "en") -> str:
     e = report.lights.get("edge", "not_evaluated")
     # A 'too good to be true' strategy beats everything PRECISELY because it is
@@ -972,9 +991,10 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
     calmar_value = (float(m.get("cagr") or 0.0) / mdd_abs) if mdd_abs > 1e-12 else 0.0
     metric_y, metric_h, gap = 0.49, 0.115, 0.017
     metric_w = (0.91 - 3 * gap) / 4
+    overfit_risk = overfit_risk_score(report.credibility.value)
     metrics = [
         (_png_label("return_quality", lang), f"{report.return_quality.value:.0f}/100", _grade_color(report.return_quality.value), ""),
-        (_png_label("overfit_risk", lang), f"{report.credibility.value:.0f}/100", _grade_color(report.credibility.value), ""),
+        (_png_label("overfit_risk", lang), f"{overfit_risk:.0f}/100", _risk_color(overfit_risk), ""),
         (_png_label("maxdd", lang), f"{mdd * 100:.0f}%", _grade_color(report.risk.value), _png_label("historical_path", lang)),
         (_png_label("calmar", lang), f"{calmar_value:.2f}", _grade_color(report.return_quality.value), _png_label("risk_adjusted_return", lang)),
     ]

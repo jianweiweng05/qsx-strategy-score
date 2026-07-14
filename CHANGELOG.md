@@ -2,6 +2,13 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## v0.2.3 — Overfit-risk display scale
+
+### Fixed
+
+- The shareable scorecard now displays overfit risk on a risk-native scale: lower is safer. A credibility score of `99/100` therefore renders as `Overfit risk 1/100` in green.
+- This is a display-only correction. It does not change the credibility pillar, overall score, grade, tier, or any scoring gate.
+
 ## v0.2.2 — CI correction
 
 ### Fixed
