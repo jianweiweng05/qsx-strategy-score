@@ -1,9 +1,9 @@
 """Rendering.
 
 `render_unified_text(report)` -> a terminal-friendly box (no third-party deps).
-`render_unified_png(report, returns, out)` -> a single shareable PNG report card
-with the score, the pillars, charts, the red-flag area and the disclaimer.
-matplotlib is imported lazily inside render_unified_png so the core package stays
+`render_unified_png(report, returns, out)` -> a single shareable PNG report card.
+`render_free_pdf(report, returns, out)` -> a three-page free diagnostic PDF.
+matplotlib is imported lazily inside the renderers so the core package stays
 pandas-only.
 """
 from __future__ import annotations
@@ -90,8 +90,8 @@ def _maybe_cjk_font(plt, *texts) -> None:
         )
     else:
         candidates = (
-            "PingFang SC", "PingFang HK", "Heiti SC", "Heiti TC", "Songti SC",
-            "STHeiti", "Arial Unicode MS",
+            "PingFang SC", "Hiragino Sans GB", "Arial Unicode MS", "PingFang HK",
+            "Heiti SC", "Heiti TC", "Songti SC", "STHeiti",
             # Linux (Debian fonts-noto-cjk): matplotlib enumerates only the JP face
             # of the .ttc, which still covers ~all simplified glyphs — without it a
             # Linux server renders Chinese as tofu boxes.
@@ -718,6 +718,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
         from matplotlib.patches import FancyBboxPatch
         from matplotlib.ticker import NullFormatter
     except ImportError as e:  # pragma: no cover
@@ -1060,4 +1061,223 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
 
     fig.savefig(out_path, dpi=100, facecolor=_CARD_BG)
     plt.close(fig)
+    return out_path
+
+
+def render_free_pdf(report, returns: pd.Series, out_path: str, *,
+                    bench: Optional[dict] = None, lang: str = "en",
+                    triage: Optional[dict] = None) -> str:
+    """Render a compact three-page PDF containing only free-screening evidence."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+        from matplotlib.backends.backend_pdf import PdfPages
+        from matplotlib.patches import FancyBboxPatch
+    except ImportError as e:  # pragma: no cover
+        raise ImportError("render_free_pdf needs matplotlib: pip install 'qsx-score-free[card]'") from e
+
+    from . import metrics
+    from .coaching import coaching as _coaching
+
+    en = {
+        "title": "Free strategy diagnostic", "subtitle": "Historical backtest screening",
+        "score": "QSX score", "evidence": "Evidence status", "why": "Capability pillars",
+        "metrics": "Core metrics", "path": "Equity path", "drawdown": "Drawdown",
+        "mc": "Monte Carlo range", "findings": "What needs attention",
+        "next": "Recommended next step", "boundary": "What this free report does not test",
+        "boundary_body": "Execution costs and slippage, crisis/regime behavior, peer-universe ranking, capacity, and live-deployment readiness require deeper due diligence.",
+        "footer": "Free historical screening, not investment advice. quantscopex.com/score",
+        "none": "No clear hard failure in the free screening.", "strategy": "Strategy",
+        "hold": "Buy & hold", "prob_profit": "Probability of profit", "worst": "Worst 5% MaxDD",
+    }
+    zh = {
+        "title": "免费策略诊断", "subtitle": "历史回测初步筛查", "score": "QSX 评分",
+        "evidence": "证据状态", "why": "能力支柱", "metrics": "核心指标",
+        "path": "净值路径", "drawdown": "回撤路径", "mc": "蒙特卡洛区间",
+        "findings": "需要重点关注", "next": "建议下一步", "boundary": "免费报告未覆盖",
+        "boundary_body": "交易成本与滑点、危机/环境表现、同类策略排名、容量和实盘放行仍需更深入的尽调。",
+        "footer": "免费历史筛查，不构成投资建议。quantscopex.com/zh/score",
+        "none": "免费筛查未发现明确硬伤。", "strategy": "策略", "hold": "买入持有",
+        "prob_profit": "盈利概率", "worst": "最差 5% 最大回撤",
+    }
+    copy = zh if lang == "zh" else en
+    r = returns.dropna().astype(float)
+    ppy = float(report.meta.get("ppy") or 252.0)
+    eq = metrics.equity_curve(r)
+    dd = eq.div(eq.cummax()).sub(1.0)
+    mc = metrics.monte_carlo(r, ppy)
+    issues = (_coaching(report).get("issues") or [])[:3]
+    evidence = report.meta.get("evidence") or {}
+    next_step = (triage or {}).get("next_step") or {}
+    status_color = _CARD_AMBER if report.grade == "PROVISIONAL" else (
+        _CARD_RED if report.judgement == "FLAGGED" else _CARD_GREEN)
+    _maybe_cjk_font(plt, *copy.values(), _localized_headline(report, lang))
+
+    def new_page():
+        fig = plt.figure(figsize=(8.27, 11.69), facecolor=_CARD_BG)
+        canvas = fig.add_axes([0, 0, 1, 1]); canvas.set_axis_off()
+        fig.text(0.065, 0.955, "QUANTSCOPEX", color=_CARD_GREEN, fontsize=9.5, fontweight="bold")
+        fig.text(0.935, 0.955, "FREE SCORE", color=_CARD_FAINT, fontsize=8.5, ha="right")
+        fig.text(0.065, 0.035, copy["footer"], color=_CARD_FAINT, fontsize=7.8)
+        return fig
+
+    def panel(fig, bounds, *, face=_CARD_PANEL, edge=_CARD_BORDER):
+        ax = fig.add_axes(bounds); ax.set_axis_off()
+        ax.add_patch(FancyBboxPatch(
+            (0, 0), 1, 1, transform=ax.transAxes,
+            boxstyle="round,pad=0.012,rounding_size=0.025",
+            facecolor=face, edgecolor=edge, linewidth=1.0, clip_on=False,
+        ))
+        return ax
+
+    def wrapped(value, width=76, lines=3):
+        return "\n".join(textwrap.wrap(str(value or ""), width=width)[:lines])
+
+    def metric(ax, x, label, value, note="", value_size=16):
+        ax.text(x, 0.73, label, color=_CARD_MUTED, fontsize=8.2, fontweight="bold", va="top")
+        ax.text(x, 0.42, value, color=_CARD_TEXT, fontsize=value_size, fontweight="bold", va="top")
+        if note:
+            ax.text(x, 0.15, note, color=_CARD_FAINT, fontsize=7.2, va="top")
+
+    with PdfPages(out_path) as pdf:
+        # Page 1: verdict and evidence.
+        fig = new_page()
+        fig.text(0.065, 0.89, copy["title"], color=_CARD_TEXT, fontsize=25, fontweight="bold")
+        fig.text(0.065, 0.858, copy["subtitle"], color=_CARD_MUTED, fontsize=10)
+        score_ax = panel(fig, [0.065, 0.64, 0.87, 0.17])
+        score_ax.text(0.04, 0.77, copy["score"], color=_CARD_MUTED, fontsize=9, fontweight="bold")
+        score_ax.text(0.04, 0.18, f"{report.display:.1f}", color=status_color, fontsize=48, fontweight="bold")
+        score_ax.text(0.23, 0.25, "/ 100", color=_CARD_MUTED, fontsize=13)
+        score_ax.text(0.38, 0.70, report.grade, color=status_color, fontsize=14, fontweight="bold")
+        score_ax.text(0.38, 0.48, wrapped(_localized_headline(report, lang), 46, 3),
+                      color=_CARD_TEXT, fontsize=11, va="top", linespacing=1.45)
+        ev_label = t(f"evidence.{evidence.get('status', 'insufficient')}", lang)
+        score_ax.text(0.38, 0.13, f"{copy['evidence']}: {ev_label}", color=_CARD_MUTED, fontsize=8.8)
+
+        pillars_ax = panel(fig, [0.065, 0.315, 0.87, 0.27])
+        pillars_ax.text(0.04, 0.88, copy["why"], color=_CARD_TEXT, fontsize=12, fontweight="bold")
+        rows = [
+            (t("return_quality", lang), report.return_quality.value, _grade_color(report.return_quality.value)),
+            (t("credibility", lang), overfit_risk_score(report.credibility.value), _risk_color(overfit_risk_score(report.credibility.value))),
+            (t("drawdown_control", lang), report.risk.value, _grade_color(report.risk.value)),
+        ]
+        if report.edge is not None:
+            rows.append((t("edge_label", lang), report.edge.value, _grade_color(report.edge.value)))
+        for idx, (label, value, color) in enumerate(rows):
+            y = 0.70 - idx * 0.17
+            pillars_ax.text(0.04, y, label, color=_CARD_MUTED, fontsize=8.5, va="center")
+            pillars_ax.plot([0.33, 0.86], [y, y], color="#252b35", lw=7, solid_capstyle="round")
+            pillars_ax.plot([0.33, 0.33 + 0.53 * max(0, min(100, value)) / 100], [y, y],
+                            color=color, lw=7, solid_capstyle="round")
+            pillars_ax.text(0.93, y, f"{value:.0f}", color=_CARD_TEXT, fontsize=9, ha="right", va="center")
+        pillars_ax.set_xlim(0, 1); pillars_ax.set_ylim(0, 1)
+
+        meta_ax = panel(fig, [0.065, 0.105, 0.87, 0.15], face=_CARD_PANEL_2)
+        start = str(report.meta.get("start") or "")[:10]
+        end = str(report.meta.get("end") or "")[:10]
+        metric(meta_ax, 0.04, _png_label("period", lang), f"{start}  →  {end}", value_size=11)
+        sample_unit = report.meta.get("sample_unit", "bars")
+        metric(meta_ax, 0.55, t("sample", lang),
+               f"{report.meta.get('n', len(r))} {t(sample_unit, lang)}",
+               f"{float(report.meta.get('span_years') or 0):.2f} {'年' if lang == 'zh' else 'years'}",
+               value_size=12)
+        pdf.savefig(fig, facecolor=_CARD_BG); plt.close(fig)
+
+        # Page 2: metrics and paths.
+        fig = new_page()
+        fig.text(0.065, 0.89, copy["metrics"], color=_CARD_TEXT, fontsize=22, fontweight="bold")
+        metrics_ax = panel(fig, [0.065, 0.69, 0.87, 0.14])
+        values = [
+            ("CAGR", f"{metrics.cagr(r, ppy) * 100:.1f}%"),
+            ("Sharpe", f"{metrics.sharpe(r, ppy):.2f}"),
+            ("Sortino", f"{metrics.sortino(r, ppy):.2f}"),
+            ("Calmar", f"{metrics.calmar(r, ppy):.2f}"),
+            ("MaxDD", f"{metrics.max_drawdown(eq) * 100:.1f}%"),
+            ("CVaR 5%", f"{metrics.cvar(r, 0.05) * 100:.1f}%"),
+        ]
+        for idx, (label, value) in enumerate(values):
+            metric(metrics_ax, 0.035 + idx * 0.16, label, value)
+
+        eq_ax = fig.add_axes([0.10, 0.43, 0.80, 0.20], facecolor=_CARD_PANEL)
+        eq_ax.plot(eq.index, eq.values, color=_CARD_GREEN, lw=1.8, label=copy["strategy"])
+        if bench:
+            eq_ax.plot(bench["bnh_curve"].index, bench["bnh_curve"].values,
+                       color=_CARD_AMBER, lw=1.3, label=copy["hold"])
+        eq_ax.set_title(copy["path"], color=_CARD_TEXT, fontsize=10, loc="left", pad=10)
+        eq_ax.tick_params(colors=_CARD_FAINT, labelsize=6); eq_ax.grid(color="#252b35", alpha=0.7, linewidth=0.5)
+        for spine in eq_ax.spines.values(): spine.set_color(_CARD_BORDER)
+        eq_ax.legend(frameon=False, labelcolor=_CARD_MUTED, fontsize=7, loc="upper left")
+
+        dd_ax = fig.add_axes([0.10, 0.18, 0.37, 0.18], facecolor=_CARD_PANEL)
+        dd_ax.fill_between(dd.index, dd.values * 100, 0, color=_CARD_RED, alpha=0.25)
+        dd_ax.plot(dd.index, dd.values * 100, color=_CARD_RED, lw=1.0)
+        dd_ax.set_title(copy["drawdown"], color=_CARD_TEXT, fontsize=9, loc="left", pad=8)
+        dd_ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=3, maxticks=5))
+        dd_ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(dd_ax.xaxis.get_major_locator()))
+        dd_ax.tick_params(colors=_CARD_FAINT, labelsize=6); dd_ax.grid(color="#252b35", alpha=0.7, linewidth=0.5)
+        for spine in dd_ax.spines.values(): spine.set_color(_CARD_BORDER)
+
+        mc_ax = fig.add_axes([0.53, 0.18, 0.37, 0.18], facecolor=_CARD_PANEL)
+        if mc:
+            x = range(len(mc["band_mid"]))
+            mc_ax.fill_between(x, mc["band_lo"], mc["band_hi"], color=_CARD_BLUE, alpha=0.20)
+            mc_ax.plot(x, mc["band_mid"], color=_CARD_BLUE, lw=1.2)
+            mc_ax.text(0.03, 0.91, f"{copy['prob_profit']}: {(1 - mc['prob_loss']) * 100:.0f}%",
+                       transform=mc_ax.transAxes, color=_CARD_MUTED, fontsize=7.2, va="top")
+            mc_ax.text(0.03, 0.80, f"{copy['worst']}: {mc['maxdd_worst5'] * 100:.1f}%",
+                       transform=mc_ax.transAxes, color=_CARD_MUTED, fontsize=7.2, va="top")
+        mc_ax.set_title(copy["mc"], color=_CARD_TEXT, fontsize=9, loc="left", pad=8)
+        mc_ax.tick_params(colors=_CARD_FAINT, labelsize=6); mc_ax.grid(color="#252b35", alpha=0.7, linewidth=0.5)
+        for spine in mc_ax.spines.values(): spine.set_color(_CARD_BORDER)
+        pdf.savefig(fig, facecolor=_CARD_BG); plt.close(fig)
+
+        # Page 3: findings and next action.
+        fig = new_page()
+        fig.text(0.065, 0.89, copy["findings"], color=_CARD_TEXT, fontsize=22, fontweight="bold")
+        findings_ax = panel(fig, [0.065, 0.52, 0.87, 0.31])
+        if not issues:
+            findings_ax.text(0.045, 0.82, copy["none"], color=_CARD_GREEN, fontsize=11, fontweight="bold")
+            ep = (triage or {}).get("edge_persistence") or {}
+            ev = (triage or {}).get("evidence_confidence") or {}
+            dep = (triage or {}).get("dependency_lite") or {}
+            summaries = [
+                (t("edge_persistence", lang), ep.get("label_local") or ep.get("label") or t("unavailable", lang)),
+                (t("evidence_confidence", lang), ev.get("level_local") or ev.get("level") or t("unavailable", lang)),
+                (t("dependency_lite", lang), dep.get("label_local") or dep.get("label") or t("unavailable", lang)),
+            ]
+            for idx, (label, value) in enumerate(summaries):
+                y = 0.60 - idx * 0.16
+                findings_ax.text(0.045, y, label, color=_CARD_MUTED, fontsize=8.5, va="center")
+                findings_ax.text(0.42, y, str(value), color=_CARD_TEXT, fontsize=9.5,
+                                 fontweight="bold", va="center")
+        else:
+            y = 0.82
+            for idx, issue in enumerate(issues, 1):
+                problem, direction = _localized_issue(issue, lang)
+                findings_ax.text(0.045, y, str(idx), color=_CARD_GREEN, fontsize=12, fontweight="bold", va="top")
+                findings_ax.text(0.10, y, wrapped(problem, 60, 2), color=_CARD_TEXT, fontsize=10.2,
+                                 fontweight="bold", va="top", linespacing=1.35)
+                findings_ax.text(0.10, y - 0.10, wrapped(direction, 76, 2), color=_CARD_MUTED,
+                                 fontsize=8.2, va="top", linespacing=1.35)
+                y -= 0.27
+
+        step_ax = panel(fig, [0.065, 0.285, 0.87, 0.17], face="#0c1713", edge="#1d5c46")
+        step_ax.text(0.045, 0.75, copy["next"], color=_CARD_GREEN, fontsize=9, fontweight="bold")
+        step_ax.text(0.045, 0.53, wrapped(next_step.get("title") or t("next_step.pro_title", lang), 60, 2),
+                     color=_CARD_TEXT, fontsize=12, fontweight="bold", va="top")
+        step_ax.text(0.045, 0.26, wrapped(next_step.get("body") or t("next_step.pro_body", lang), 86, 2),
+                     color=_CARD_MUTED, fontsize=8.5, va="top")
+
+        boundary_ax = panel(fig, [0.065, 0.105, 0.87, 0.12], face=_CARD_PANEL_2)
+        boundary_ax.text(0.045, 0.68, copy["boundary"], color=_CARD_MUTED, fontsize=8.5, fontweight="bold")
+        boundary_ax.text(0.045, 0.42, wrapped(copy["boundary_body"], 92, 3),
+                         color=_CARD_FAINT, fontsize=8, va="top", linespacing=1.35)
+        pdf.savefig(fig, facecolor=_CARD_BG); plt.close(fig)
+
+        info = pdf.infodict()
+        info["Title"] = "QuantScopeX Free Strategy Diagnostic"
+        info["Author"] = "QuantScopeX"
+        info["Subject"] = "Historical strategy screening"
     return out_path

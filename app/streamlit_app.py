@@ -25,7 +25,7 @@ from qsx_strategy_score.i18n import SUPPORTED_LANGS, t
 from qsx_strategy_score.io import load_prices
 from qsx_strategy_score.metrics import benchmark_compare, calmar, cagr, equity_curve, max_drawdown, monte_carlo, sharpe, sortino
 from qsx_strategy_score.overlay_client import OverlayPreviewError, run_overlay_preview, trade_log_to_daily_overlay_returns
-from qsx_strategy_score.report import render_unified_png
+from qsx_strategy_score.report import render_free_pdf, render_unified_png
 
 
 AUTO_ASSET = "__auto__"
@@ -1017,6 +1017,25 @@ def strategy_scorecard_png(report, returns: pd.Series, mc: dict | None, bench_cm
         return None
 
 
+def strategy_report_pdf(report, returns: pd.Series, bench_cmp: dict | None,
+                        triage: dict, lang: str) -> bytes | None:
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as fh:
+            tmp = fh.name
+        render_free_pdf(report, returns, tmp, bench=bench_cmp, lang=lang, triage=triage)
+        with open(tmp, "rb") as fh:
+            return fh.read()
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
 def risk_tags_markup(tags: list[dict], lang: str) -> str:
     cells = "".join(
         (
@@ -1708,15 +1727,26 @@ def main() -> None:
         unsafe_allow_html=True,
     )
     scorecard_png = strategy_scorecard_png(report, r, mc, bench_cmp, triage, lang)
-    if scorecard_png:
-        st.download_button(
-            tr("download_strategy_card", lang),
-            scorecard_png,
-            file_name="qsx_strategy_scorecard.png",
-            mime="image/png",
-            type="primary",
-            use_container_width=True,
-        )
+    free_pdf = strategy_report_pdf(report, r, bench_cmp, triage, lang)
+    if scorecard_png or free_pdf:
+        card_col, pdf_col = st.columns(2)
+        if scorecard_png:
+            card_col.download_button(
+                tr("download_strategy_card", lang),
+                scorecard_png,
+                file_name="qsx_strategy_scorecard.png",
+                mime="image/png",
+                type="primary",
+                use_container_width=True,
+            )
+        if free_pdf:
+            pdf_col.download_button(
+                "下载免费 PDF" if lang == "zh" else "Download free PDF",
+                free_pdf,
+                file_name="qsx_free_strategy_diagnostic.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
         st.markdown(f"<div class='qsx-small' style='margin-top:-4px;'>{tr('share_card_note', lang)}</div>", unsafe_allow_html=True)
     else:
         st.caption(tr("share_card_unavailable", lang))

@@ -24,7 +24,7 @@ from qsx_strategy_score.overlay_client import (
     trade_log_to_daily_overlay_returns,
 )
 from qsx_strategy_score.metrics import benchmark_compare
-from qsx_strategy_score.report import render_unified_png
+from qsx_strategy_score.report import render_free_pdf, render_unified_png
 from qsx_strategy_score.scoring import overfit_risk_score
 from qsx_strategy_score.report_preflight import preflight_score_upload
 
@@ -40,6 +40,20 @@ def test_score_unified_and_triage_on_sample_returns():
     assert "next_step" in triage
     assert "evidence_confidence" in triage
     assert "pro_unlock_map" in triage
+
+
+def test_free_pdf_renders_three_pages(tmp_path):
+    fitz = pytest.importorskip("fitz")
+    r, meta = load_returns(ROOT / "examples" / "sample_returns.csv")
+    report = score_unified(r, "crypto", meta=meta)
+    triage = build_triage_diagnostics(r, report, meta=meta, lang="zh").to_dict()
+    out = tmp_path / "free-diagnostic.pdf"
+
+    render_free_pdf(report, r, str(out), lang="zh", triage=triage)
+
+    assert out.read_bytes().startswith(b"%PDF")
+    with fitz.open(out) as doc:
+        assert doc.page_count == 3
 
 
 

@@ -15,14 +15,16 @@ from .profiles import PROFILES, PROFILE_NAMES, get_profile, ANCHORS_SOURCE, VALI
 from .scoring import score_unified, SubScore, UnifiedReport
 from .coaching import coaching
 from .triage import build_triage_diagnostics, TriageDiagnostics
+from .report import render_free_pdf
 
-__version__ = "0.2.4"
+__version__ = "0.3.0"
 
 __all__ = [
     "load_returns",
     "score_unified",
     "coaching",
     "build_triage_diagnostics",
+    "render_free_pdf",
     "SubScore",
     "UnifiedReport",
     "TriageDiagnostics",

@@ -114,10 +114,10 @@ qsx-score examples/strategy_alpha.csv --lang es
 qsx-score examples/strategy_alpha.csv --lang pt-BR
 ```
 
-Export a PNG scorecard and JSON report:
+Export a shareable PNG, a three-page free diagnostic PDF, and JSON:
 
 ```bash
-qsx-score examples/strategy_alpha.csv --asset BTC --out card.png --json report.json
+qsx-score examples/strategy_alpha.csv --asset BTC --out card.png --pdf diagnostic.pdf --json report.json
 ```
 
 Run the web app:

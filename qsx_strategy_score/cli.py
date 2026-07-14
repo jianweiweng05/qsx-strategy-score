@@ -17,7 +17,7 @@ from .asset_library import detect_asset, asset_close
 from .io import load_prices
 from .metrics import benchmark_compare, monte_carlo
 from .profiles import PROFILE_NAMES
-from .report import render_unified_text, render_unified_png
+from .report import render_free_pdf, render_unified_text, render_unified_png
 from .i18n import SUPPORTED_LANGS, normalize_lang
 
 
@@ -52,6 +52,7 @@ def main(argv: Optional[list] = None) -> int:
                    help="how many strategy/parameter trials you searched before picking this curve "
                         "(applies a multiple-testing penalty)")
     p.add_argument("--out", default=None, metavar="PNG", help="write a shareable PNG report card here")
+    p.add_argument("--pdf", default=None, metavar="PDF", help="write a three-page free diagnostic PDF here")
     p.add_argument("--json", default=None, metavar="JSON", help="write the report JSON here")
     p.add_argument("--version", action="version", version=f"qsx-score {__version__}")
     a = p.parse_args(argv)
@@ -143,6 +144,12 @@ def main(argv: Optional[list] = None) -> int:
             print(f"\nwrote report card -> {a.out}")
         except Exception as e:  # noqa: BLE001
             print(f"warning: PNG not written: {e}", file=sys.stderr)
+    if a.pdf:
+        try:
+            render_free_pdf(report, r, a.pdf, bench=bench_cmp, lang=lang, triage=triage)
+            print(f"wrote free diagnostic PDF -> {a.pdf}")
+        except Exception as e:  # noqa: BLE001
+            print(f"warning: PDF not written: {e}", file=sys.stderr)
     if a.json:
         with open(a.json, "w") as f:
             out = report.to_dict()
