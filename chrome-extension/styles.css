@@ -1,0 +1,535 @@
+/* styles.css - Chrome 插件样式 */
+
+/* 诊断按钮 */
+#qsx-diagnose-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  transition: all 0.2s;
+  z-index: 1000;
+}
+
+#qsx-diagnose-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* 弹窗背景 */
+#qsx-modal {
+  display: flex;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  justify-content: center;
+  align-items: center;
+  z-index: 99999;
+  animation: fadeIn 0.2s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 弹窗内容 */
+.qsx-modal-content {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 弹窗头部 */
+.qsx-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.qsx-modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.qsx-close {
+  background: none;
+  border: none;
+  font-size: 32px;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  line-height: 28px;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.qsx-close:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+/* 弹窗主体 */
+.qsx-modal-body {
+  padding: 24px;
+}
+
+/* 上传区域 */
+.qsx-upload-area {
+  text-align: center;
+  padding: 48px 24px;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  transition: all 0.3s;
+}
+
+.qsx-upload-area.dragover {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.qsx-upload-area svg {
+  color: #9ca3af;
+  margin-bottom: 16px;
+}
+
+.qsx-upload-area h3 {
+  margin: 16px 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.qsx-upload-area p {
+  margin: 0 0 24px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.qsx-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 0 0 18px;
+  text-align: left;
+}
+
+.qsx-controls label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.qsx-controls span {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.qsx-controls select {
+  width: 100%;
+  min-height: 39px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2937;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+}
+
+.qsx-controls small {
+  min-height: 28px;
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.qsx-controls .qsx-btn {
+  width: 100%;
+  min-height: 39px;
+  padding: 9px 12px;
+}
+
+@media (max-width: 560px) {
+  .qsx-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 按钮 */
+.qsx-btn {
+  display: inline-block;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  font-family: inherit;
+}
+
+.qsx-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.qsx-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.qsx-btn-secondary {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.qsx-btn-secondary:hover {
+  background: #e5e7eb;
+}
+
+/* 帮助文档 */
+.qsx-help {
+  margin-top: 24px;
+  text-align: left;
+}
+
+.qsx-help details {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.qsx-help summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #667eea;
+  font-size: 14px;
+}
+
+.qsx-help ol {
+  margin: 12px 0 0;
+  padding-left: 24px;
+}
+
+.qsx-help li {
+  margin: 8px 0;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+/* 加载动画 */
+.qsx-loading-area {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.qsx-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #f3f4f6;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+#qsx-loading-text {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* 结果卡片 */
+.qsx-score-card {
+  animation: fadeIn 0.3s;
+}
+
+.qsx-score-header {
+  text-align: center;
+  padding: 32px 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px 12px 0 0;
+  margin: -24px -24px 24px;
+}
+
+.qsx-score-number {
+  font-size: 64px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.qsx-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+}
+
+.qsx-headline {
+  background: #f9fafb;
+  padding: 16px;
+  border-radius: 8px;
+  color: #1f2937;
+  font-size: 16px;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+/* 支柱 */
+.qsx-pillars {
+  margin-bottom: 24px;
+}
+
+.qsx-pillar {
+  margin-bottom: 16px;
+}
+
+.qsx-pillar-label {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+.qsx-pillar-bar {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.qsx-pillar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  transition: width 0.6s ease-out;
+}
+
+.qsx-pillar-value {
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* 指示灯 */
+.qsx-lights {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.qsx-light {
+  background: #f9fafb;
+  padding: 12px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.qsx-light span:first-child {
+  color: #6b7280;
+}
+
+/* 标志 */
+.qsx-flags {
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.qsx-flags h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #92400e;
+}
+
+.qsx-flags ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.qsx-flags li {
+  margin: 6px 0;
+  font-size: 13px;
+  color: #78350f;
+}
+
+.qsx-flag-warn {
+  list-style-type: square;
+}
+
+.qsx-error-card {
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff7f7;
+  padding: 20px;
+}
+
+.qsx-error-card h3 {
+  margin: 0 0 8px;
+  color: #991b1b;
+  font-size: 18px;
+}
+
+.qsx-error-card p {
+  margin: 8px 0 0;
+  color: #5f2931;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.qsx-smart-cta {
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  background: #f6f8ff;
+  padding: 16px;
+  margin: 0 0 22px;
+}
+
+.qsx-smart-cta-overlay {
+  border-color: #9fd0b8;
+  background: #f2fbf6;
+}
+
+.qsx-smart-cta-exposure {
+  border-color: #c7b8ea;
+  background: #f8f6ff;
+}
+
+.qsx-smart-cta-coaching {
+  border-color: #e0c18d;
+  background: #fff9ee;
+}
+
+.qsx-smart-kicker {
+  color: #667eea;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+
+.qsx-smart-cta-overlay .qsx-smart-kicker {
+  color: #1f8f5f;
+}
+
+.qsx-smart-cta-coaching .qsx-smart-kicker {
+  color: #9b6418;
+}
+
+.qsx-smart-cta h3 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.qsx-smart-cta p {
+  margin: 8px 0 0;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.qsx-smart-proof {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.qsx-smart-proof span,
+.qsx-smart-proof strong {
+  min-width: 0;
+  border-radius: 7px;
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.qsx-smart-proof span {
+  color: #6b7280;
+  font-weight: 600;
+  padding-left: 0;
+}
+
+.qsx-smart-proof strong {
+  border: 1px solid rgba(107, 114, 128, 0.18);
+  background: rgba(255, 255, 255, 0.7);
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.qsx-smart-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.qsx-smart-actions .qsx-btn {
+  flex: 1;
+  text-align: center;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+/* 操作按钮 */
+.qsx-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.qsx-actions .qsx-btn {
+  flex: 1;
+  text-align: center;
+}

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+  <title>QSX Strategy Score</title>
+</head>
+<body>
+  <main class="popup-shell">
+    <header class="popup-header">
+      <div>
+        <p class="eyebrow">QuantScopeX</p>
+        <h1>QSX Strategy Score</h1>
+      </div>
+      <span id="app-version" class="version">v1.1.0</span>
+    </header>
+
+    <section id="upload-view" class="view active">
+      <label class="field">
+        <span data-i18n="apiLabel">API URL</span>
+        <input id="api-base" type="url" value="https://www.quantscopex.com" spellcheck="false">
+      </label>
+
+      <div class="form-row">
+        <label class="field">
+          <span data-i18n="assetLabel">Benchmark asset</span>
+          <select id="asset">
+            <option value="" data-i18n="autoDetect">Auto-detect</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="langLabel">Language</span>
+          <select id="lang">
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="es">Español</option>
+            <option value="pt-BR">Português BR</option>
+          </select>
+        </label>
+      </div>
+
+      <label id="drop-zone" class="drop-zone">
+        <input id="file-input" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm">
+        <span class="drop-title" data-i18n="strategyFileTitle">Choose strategy file</span>
+        <span id="file-name" class="drop-subtitle" data-i18n="strategyFileHint">CSV / TSV / Excel, max 5 MB</span>
+      </label>
+
+      <label id="benchmark-zone" class="drop-zone compact">
+        <input id="benchmark-input" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm">
+        <span class="drop-title" data-i18n="benchmarkTitle">Optional: upload asset K-line</span>
+        <span id="benchmark-name" class="drop-subtitle" data-i18n="benchmarkHint">date + close/price for hold and random-timing tests</span>
+      </label>
+
+      <button id="score-btn" class="primary-btn" type="button" disabled data-i18n="scoreButton">Score strategy</button>
+      <p class="help-text" data-i18n="uploadHelp">Supports return series, equity curves, closed-trade logs, and backtest exports.</p>
+      <a
+        class="free-radar-link"
+        href="https://www.tradingview.com/script/nY7jGyZu/?utm_source=chrome_ext&utm_medium=popup&utm_campaign=qsx_strategy_score&utm_content=free_tv_radar"
+        target="_blank"
+        rel="noopener noreferrer"
+        data-i18n="freeRadarLink"
+      >Free Crypto Top/Bottom Risk Radar</a>
+    </section>
+
+    <section id="loading-view" class="view">
+      <div class="spinner"></div>
+      <p data-i18n="loading">Analyzing strategy...</p>
+    </section>
+
+    <section id="result-view" class="view">
+      <div class="score-summary">
+        <div id="score-number" class="score-number">--</div>
+        <div>
+          <div id="score-grade" class="score-grade">--</div>
+          <p id="score-headline" class="score-headline"></p>
+        </div>
+      </div>
+      <div id="pillar-list" class="pillar-list"></div>
+      <div id="meta-line" class="meta-line"></div>
+      <div id="flag-list" class="flag-list"></div>
+      <div id="detail-root"></div>
+      <div id="smart-cta-root"></div>
+      <button id="another-btn" class="secondary-btn" type="button" data-i18n="anotherButton">Analyze another strategy</button>
+    </section>
+
+    <section id="error-view" class="view">
+      <h2 data-i18n="errorTitle">Analysis failed</h2>
+      <p id="error-message"></p>
+      <p id="error-hint" class="help-text"></p>
+      <button id="retry-btn" class="secondary-btn" type="button" data-i18n="retryButton">Try again</button>
+    </section>
+  </main>
+
+  <script src="smart-cta.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
