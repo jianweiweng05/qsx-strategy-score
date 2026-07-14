@@ -13,7 +13,7 @@
         <p class="eyebrow">QuantScopeX</p>
         <h1>QSX Strategy Score</h1>
       </div>
-      <span id="app-version" class="version">v1.1.0</span>
+      <span id="app-version" class="version">v1.2.0</span>
     </header>
 
     <section id="upload-view" class="view active">
@@ -81,6 +81,31 @@
       <div id="pillar-list" class="pillar-list"></div>
       <div id="meta-line" class="meta-line"></div>
       <div id="flag-list" class="flag-list"></div>
+      <section class="artifact-panel" aria-labelledby="artifact-title">
+        <div>
+          <h2 id="artifact-title">Keep and share this result</h2>
+          <p id="artifact-subtitle">Share the scorecard, or keep the three-page free diagnostic.</p>
+        </div>
+        <div class="artifact-actions primary-actions">
+          <button id="share-card-btn" class="artifact-primary" type="button">Share scorecard</button>
+          <button id="download-card-btn" class="artifact-button" type="button">PNG</button>
+          <button id="download-pdf-btn" class="artifact-button" type="button">3-page PDF</button>
+        </div>
+        <div class="artifact-actions social-actions" aria-label="Social sharing">
+          <button class="artifact-link" type="button" data-share-platform="x" aria-label="Share on X">X</button>
+          <button class="artifact-link" type="button" data-share-platform="linkedin" aria-label="Share on LinkedIn">LinkedIn</button>
+          <button class="artifact-link" type="button" data-share-platform="reddit" aria-label="Share on Reddit">Reddit</button>
+        </div>
+        <div class="artifact-email-row">
+          <input id="artifact-email" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email address">
+          <button id="email-artifacts-btn" class="artifact-button" type="button">Email PNG + PDF</button>
+        </div>
+        <label class="artifact-consent">
+          <input id="artifact-marketing" type="checkbox">
+          <span id="artifact-consent-copy">Also send occasional QuantScopeX product updates. Optional.</span>
+        </label>
+        <p id="artifact-status" class="artifact-status" role="status" aria-live="polite"></p>
+      </section>
       <div id="detail-root"></div>
       <div id="smart-cta-root"></div>
       <button id="another-btn" class="secondary-btn" type="button" data-i18n="anotherButton">Analyze another strategy</button>

@@ -348,9 +348,38 @@ const DIAGNOSTIC_COPY = {
   },
 };
 
+const ARTIFACT_COPY = {
+  zh: {
+    title: '保存并分享这次结果',
+    subtitle: '分享成绩卡，或保存三页免费诊断报告。',
+    share: '分享成绩卡',
+    preparing: '生成中...',
+    png: '下载 PNG',
+    pdf: '三页 PDF',
+    email: '发送 PNG + PDF',
+    consent: '同时接收少量 QuantScopeX 产品更新。可选，可随时退订。',
+    sent: '已发送，请查收邮箱。',
+    failed: '操作失败，请稍后重试。',
+  },
+  en: {
+    title: 'Keep and share this result',
+    subtitle: 'Share the scorecard, or keep the three-page free diagnostic.',
+    share: 'Share scorecard',
+    preparing: 'Preparing...',
+    png: 'PNG',
+    pdf: '3-page PDF',
+    email: 'Email PNG + PDF',
+    consent: 'Also send occasional QuantScopeX product updates. Optional; unsubscribe anytime.',
+    sent: 'Sent. Check your inbox.',
+    failed: 'That did not work. Please try again.',
+  },
+};
+
 const state = {
   file: null,
   benchmarkFile: null,
+  result: null,
+  artifactBusy: false,
 };
 
 const views = {
@@ -370,6 +399,16 @@ const benchmarkName = document.getElementById('benchmark-name');
 const dropZone = document.getElementById('drop-zone');
 const benchmarkZone = document.getElementById('benchmark-zone');
 const scoreBtn = document.getElementById('score-btn');
+const artifactTitle = document.getElementById('artifact-title');
+const artifactSubtitle = document.getElementById('artifact-subtitle');
+const shareCardBtn = document.getElementById('share-card-btn');
+const downloadCardBtn = document.getElementById('download-card-btn');
+const downloadPdfBtn = document.getElementById('download-pdf-btn');
+const artifactEmail = document.getElementById('artifact-email');
+const artifactMarketing = document.getElementById('artifact-marketing');
+const emailArtifactsBtn = document.getElementById('email-artifacts-btn');
+const artifactConsentCopy = document.getElementById('artifact-consent-copy');
+const artifactStatus = document.getElementById('artifact-status');
 
 function applyManifestVersion() {
   const versionEl = document.getElementById('app-version');
@@ -390,6 +429,10 @@ function cleanApiBase(value) {
 
 function uiCopy(lang = langInput?.value) {
   return UI_COPY[lang] || UI_COPY.en;
+}
+
+function artifactCopy(lang = langInput?.value) {
+  return ARTIFACT_COPY[lang === 'zh' ? 'zh' : 'en'];
 }
 
 function localizedPillarName(name, data, lang = langInput.value) {
@@ -451,6 +494,14 @@ function applyLanguage() {
   if (autoOption) autoOption.textContent = copy.autoDetect;
   if (!state.file) fileName.textContent = copy.strategyFileHint;
   if (!state.benchmarkFile) benchmarkName.textContent = copy.benchmarkHint;
+  const artifact = artifactCopy();
+  artifactTitle.textContent = artifact.title;
+  artifactSubtitle.textContent = artifact.subtitle;
+  shareCardBtn.textContent = artifact.share;
+  downloadCardBtn.textContent = artifact.png;
+  downloadPdfBtn.textContent = artifact.pdf;
+  emailArtifactsBtn.textContent = artifact.email;
+  artifactConsentCopy.textContent = artifact.consent;
 }
 
 function normalizeSavedApiBase(value) {
@@ -537,12 +588,143 @@ async function scoreFile() {
     if (!response.ok) {
       throw new Error(payload.detail || payload.hint || payload.error || `HTTP ${response.status}`);
     }
-    renderResult(normalizeScorePayload(payload, langInput.value));
+    state.result = normalizeScorePayload(payload, langInput.value);
+    renderResult(state.result);
     showView('result');
   } catch (error) {
     document.getElementById('error-message').textContent = error.message || 'Unknown error';
     document.getElementById('error-hint').textContent = uiCopy().errorHint;
     showView('error');
+  }
+}
+
+function artifactFormData() {
+  if (!state.file) throw new Error('No strategy file selected.');
+  const formData = new FormData();
+  formData.append('file', state.file);
+  formData.append('lang', langInput.value === 'zh' ? 'zh' : 'en');
+  formData.append('input_type', 'auto');
+  if (assetInput.value) formData.append('asset_key', assetInput.value);
+  if (state.benchmarkFile) formData.append('benchmark_file', state.benchmarkFile);
+  return formData;
+}
+
+function setArtifactBusy(busy, label = '') {
+  state.artifactBusy = busy;
+  [shareCardBtn, downloadCardBtn, downloadPdfBtn, emailArtifactsBtn].forEach((button) => {
+    button.disabled = busy;
+  });
+  if (busy && label) artifactStatus.textContent = label;
+}
+
+function setArtifactStatus(message, error = false) {
+  artifactStatus.textContent = message;
+  artifactStatus.classList.toggle('error', error);
+}
+
+async function fetchArtifact(kind) {
+  const response = await fetch(`${cleanApiBase(apiBaseInput.value)}/api/score/${kind}`, {
+    method: 'POST',
+    body: artifactFormData(),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+  return response.blob();
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function downloadArtifact(kind) {
+  if (state.artifactBusy) return;
+  const copy = artifactCopy();
+  setArtifactBusy(true, copy.preparing);
+  setArtifactStatus(copy.preparing);
+  try {
+    const blob = await fetchArtifact(kind);
+    downloadBlob(blob, kind === 'pdf' ? 'qsx-free-strategy-diagnostic.pdf' : 'qsx-strategy-scorecard.png');
+    setArtifactStatus('');
+  } catch (error) {
+    setArtifactStatus(error.message || copy.failed, true);
+  } finally {
+    setArtifactBusy(false);
+  }
+}
+
+async function shareScorecard() {
+  if (state.artifactBusy) return;
+  const copy = artifactCopy();
+  setArtifactBusy(true, copy.preparing);
+  setArtifactStatus(copy.preparing);
+  try {
+    const blob = await fetchArtifact('card');
+    const card = new File([blob], 'qsx-strategy-scorecard.png', { type: 'image/png' });
+    const score = state.result?.display ?? state.result?.overall ?? '-';
+    const shareData = {
+      title: 'QuantScopeX Strategy Score',
+      text: langInput.value === 'zh' ? `我的策略评分：${score}/100` : `My strategy score: ${score}/100`,
+      files: [card],
+    };
+    if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+      await navigator.share(shareData);
+    } else {
+      downloadBlob(blob, card.name);
+    }
+    setArtifactStatus('');
+  } catch (error) {
+    if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      setArtifactStatus(error.message || copy.failed, true);
+    }
+  } finally {
+    setArtifactBusy(false);
+  }
+}
+
+function sharePlatform(platform) {
+  const score = state.result?.display ?? state.result?.overall ?? '-';
+  const scoreUrl = `https://www.quantscopex.com/${langInput.value === 'zh' ? 'zh/' : ''}score`;
+  const title = langInput.value === 'zh'
+    ? `我的 QuantScopeX 策略评分是 ${score}/100`
+    : `My QuantScopeX strategy score is ${score}/100`;
+  const urls = {
+    x: `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(scoreUrl)}`,
+    linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(scoreUrl)}`,
+    reddit: `https://www.reddit.com/submit?url=${encodeURIComponent(scoreUrl)}&title=${encodeURIComponent(title)}`,
+  };
+  window.open(urls[platform], '_blank', 'noopener,noreferrer');
+}
+
+async function emailArtifacts() {
+  if (state.artifactBusy || !artifactEmail.validity.valid || !artifactEmail.value.trim()) {
+    artifactEmail.reportValidity();
+    return;
+  }
+  const copy = artifactCopy();
+  setArtifactBusy(true, copy.preparing);
+  setArtifactStatus(copy.preparing);
+  try {
+    const formData = artifactFormData();
+    formData.append('email', artifactEmail.value.trim().toLowerCase());
+    formData.append('marketing_opt_in', artifactMarketing.checked ? 'true' : 'false');
+    const response = await fetch(`${cleanApiBase(apiBaseInput.value)}/api/score/email`, {
+      method: 'POST',
+      body: formData,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.detail || copy.failed);
+    setArtifactStatus(copy.sent);
+  } catch (error) {
+    setArtifactStatus(error.message || copy.failed, true);
+  } finally {
+    setArtifactBusy(false);
   }
 }
 
@@ -948,6 +1130,13 @@ benchmarkZone.addEventListener('drop', (event) => {
 });
 
 scoreBtn.addEventListener('click', scoreFile);
+shareCardBtn.addEventListener('click', shareScorecard);
+downloadCardBtn.addEventListener('click', () => downloadArtifact('card'));
+downloadPdfBtn.addEventListener('click', () => downloadArtifact('pdf'));
+emailArtifactsBtn.addEventListener('click', emailArtifacts);
+document.querySelectorAll('[data-share-platform]').forEach((button) => {
+  button.addEventListener('click', () => sharePlatform(button.dataset.sharePlatform));
+});
 
 document.getElementById('retry-btn').addEventListener('click', () => showView('upload'));
 langInput.addEventListener('change', () => {
@@ -959,6 +1148,8 @@ document.getElementById('another-btn').addEventListener('click', () => {
   benchmarkInput.value = '';
   selectFile(null);
   selectBenchmarkFile(null);
+  state.result = null;
+  setArtifactStatus('');
   showView('upload');
 });
 

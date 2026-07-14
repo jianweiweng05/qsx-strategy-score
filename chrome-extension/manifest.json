@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "QSX Strategy Score",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Score trading strategy exports in 3 seconds. Overfit detection, drawdown risk, and edge vs random timing.",
   "permissions": [
     "storage"

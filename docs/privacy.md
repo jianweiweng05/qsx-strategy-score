@@ -6,6 +6,8 @@ QSX Strategy Score analyzes strategy files that users choose to upload.
 
 When you click **Score strategy** in the Chrome extension, the selected strategy file is sent to the QSX Strategy Score endpoint at `https://www.quantscopex.com/api/score` so the server can parse it and generate the score and benchmark comparison. Supported inputs include return series, equity curves, closed-trade logs, and tabular backtest exports. If you upload a custom benchmark/K-line file, that file is sent in the same request.
 
+After scoring, the extension can request a shareable PNG scorecard or three-page PDF from `https://www.quantscopex.com/api/score/card` and `/api/score/pdf`. These requests resend the selected strategy and optional benchmark only when you click the corresponding share or download action. If you explicitly request email delivery, the same files and the email address you enter are sent to `/api/score/email`; the generated PNG and PDF are attached to that email. Product updates are optional and require a separate checkbox.
+
 The extension also sends the selected language and optional benchmark asset symbol.
 
 ## Data Use

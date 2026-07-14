@@ -2,6 +2,15 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## Chrome 1.2.0 - Share and PDF delivery
+
+### Added
+
+- Native scorecard sharing plus X, LinkedIn, and Reddit actions.
+- Direct PNG and three-page free diagnostic PDF downloads.
+- Optional email delivery of both artifacts with separate marketing consent.
+- All artifacts remain server-rendered by the same public scoring core as GitHub and the website.
+
 ## v0.3.0 — Shareable free diagnostic artifacts
 
 ### Added
