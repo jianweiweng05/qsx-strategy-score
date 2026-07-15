@@ -380,6 +380,9 @@ def _sample_phrase(report, lang: str = "en") -> str:
         return f"{mark} {label} ({n} {unit_txt})"
     if ok:
         return f"{mark} {t('sample_adequate', lang)} ({n} {unit_txt})"
+    if lang == "zh":
+        eff_txt = f"，约 {eff:.0f} 个有效样本" if eff else ""
+        return f"{mark} {t('sample_thin', lang)}（{n} {unit_txt}{eff_txt}），结论暂定"
     eff_txt = f", ~{eff:.0f} effective" if eff else ""
     return f"{mark} {t('sample_thin', lang)} ({n} {unit_txt}{eff_txt}) - provisional"
 
@@ -464,7 +467,7 @@ def _png_label(key: str, lang: str) -> str:
             "return_quality": "收益质量",
             "overfit_risk": "过拟合风险",
             "maxdd": "最大回撤",
-            "calmar": "Calmar",
+            "calmar": "卡玛比率",
             "historical_path": "历史路径",
             "risk_adjusted_return": "风险调整收益",
             "strategy": "策略",
@@ -603,7 +606,8 @@ def _cap_note(report, lang: str = "en") -> str:
     reasons = [localize_cap_reason(str(x), lang) for x in reasons]
     if not reasons:
         return ""
-    return f"{t('score_capped', lang)} — {reasons[0]} ({t('pillars_avg', lang)} {m.get('uncapped_score', 0):.0f})"
+    separator = "：" if lang == "zh" else " — "
+    return f"{t('score_capped', lang)}{separator}{reasons[0]} ({t('pillars_avg', lang)} {m.get('uncapped_score', 0):.0f})"
 
 
 def _localized_issue(it: dict, lang: str) -> tuple[str, str]:
@@ -645,7 +649,7 @@ def render_unified_text(report, *, lang: str = "en", triage: Optional[dict] = No
     co = _coaching(report)
     emoji, _c, _w = _unified_status(report)
     L = ["=" * 64]
-    L.append(f"  {t('score_title', lang):<28} {report.display:5.1f} / 100   {emoji} {report.grade}")
+    L.append(f"  {t('score_title', lang):<28} {report.display:5.1f} / 100   {emoji} {_png_grade(report.grade, lang)}")
     headline = _localized_headline(report, lang)
     for ln in textwrap.wrap(headline, width=58):
         L.append("  " + ln)
@@ -935,7 +939,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
 
     # Score + verdict.
     score_ax = axis_box([0.045, 0.63, 0.205, 0.205], face="#111820", edge="#2a3647")
-    score_ax.text(0.09, 0.82, "QSX SCORE", fontsize=10.5, color=_CARD_MUTED,
+    score_ax.text(0.09, 0.82, f"QSX {_png_label('score', lang)}", fontsize=10.5, color=_CARD_MUTED,
                   fontweight="bold", va="top")
     score_ax.text(0.09, 0.47, f"{report.display:.0f}", fontsize=54,
                   fontweight="bold", color=accent, va="center", family="monospace")
@@ -1097,7 +1101,7 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         "evidence": "证据状态", "why": "能力支柱", "metrics": "核心指标",
         "path": "净值路径", "drawdown": "回撤路径", "mc": "蒙特卡洛区间",
         "findings": "需要重点关注", "next": "建议下一步", "boundary": "免费报告未覆盖",
-        "boundary_body": "交易成本与滑点、危机/环境表现、同类策略排名、容量和实盘放行仍需更深入的尽调。",
+        "boundary_body": "交易成本与滑点、危机与市场环境表现、同类策略排名、容量和实盘放行仍需更深入的尽调。",
         "footer": "免费历史筛查，不构成投资建议。quantscopex.com/zh/score",
         "none": "免费筛查未发现明确硬伤。", "strategy": "策略", "hold": "买入持有",
         "prob_profit": "盈利概率", "worst": "最差 5% 最大回撤",
@@ -1119,7 +1123,8 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         fig = plt.figure(figsize=(8.27, 11.69), facecolor=_CARD_BG)
         canvas = fig.add_axes([0, 0, 1, 1]); canvas.set_axis_off()
         fig.text(0.065, 0.955, "QUANTSCOPEX", color=_CARD_GREEN, fontsize=9.5, fontweight="bold")
-        fig.text(0.935, 0.955, "FREE SCORE", color=_CARD_FAINT, fontsize=8.5, ha="right")
+        fig.text(0.935, 0.955, "免费评分" if lang == "zh" else "FREE SCORE",
+                 color=_CARD_FAINT, fontsize=8.5, ha="right")
         fig.text(0.065, 0.035, copy["footer"], color=_CARD_FAINT, fontsize=7.8)
         return fig
 
@@ -1150,7 +1155,8 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         score_ax.text(0.04, 0.77, copy["score"], color=_CARD_MUTED, fontsize=9, fontweight="bold")
         score_ax.text(0.04, 0.18, f"{report.display:.1f}", color=status_color, fontsize=48, fontweight="bold")
         score_ax.text(0.23, 0.25, "/ 100", color=_CARD_MUTED, fontsize=13)
-        score_ax.text(0.38, 0.70, report.grade, color=status_color, fontsize=14, fontweight="bold")
+        score_ax.text(0.38, 0.70, _png_grade(report.grade, lang),
+                      color=status_color, fontsize=14, fontweight="bold")
         score_ax.text(0.38, 0.48, wrapped(_localized_headline(report, lang), 46, 3),
                       color=_CARD_TEXT, fontsize=11, va="top", linespacing=1.45)
         ev_label = t(f"evidence.{evidence.get('status', 'insufficient')}", lang)
@@ -1189,14 +1195,19 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         fig = new_page()
         fig.text(0.065, 0.89, copy["metrics"], color=_CARD_TEXT, fontsize=22, fontweight="bold")
         metrics_ax = panel(fig, [0.065, 0.69, 0.87, 0.14])
-        values = [
-            ("CAGR", f"{metrics.cagr(r, ppy) * 100:.1f}%"),
-            ("Sharpe", f"{metrics.sharpe(r, ppy):.2f}"),
-            ("Sortino", f"{metrics.sortino(r, ppy):.2f}"),
-            ("Calmar", f"{metrics.calmar(r, ppy):.2f}"),
-            ("MaxDD", f"{metrics.max_drawdown(eq) * 100:.1f}%"),
-            ("CVaR 5%", f"{metrics.cvar(r, 0.05) * 100:.1f}%"),
-        ]
+        metric_names = (
+            ["年化收益率", "夏普比率", "索提诺比率", "卡玛比率", "最大回撤", "条件风险价值 5%"]
+            if lang == "zh"
+            else ["CAGR", "Sharpe", "Sortino", "Calmar", "MaxDD", "CVaR 5%"]
+        )
+        values = list(zip(metric_names, [
+            f"{metrics.cagr(r, ppy) * 100:.1f}%",
+            f"{metrics.sharpe(r, ppy):.2f}",
+            f"{metrics.sortino(r, ppy):.2f}",
+            f"{metrics.calmar(r, ppy):.2f}",
+            f"{metrics.max_drawdown(eq) * 100:.1f}%",
+            f"{metrics.cvar(r, 0.05) * 100:.1f}%",
+        ]))
         for idx, (label, value) in enumerate(values):
             metric(metrics_ax, 0.035 + idx * 0.16, label, value)
 
@@ -1277,7 +1288,7 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         pdf.savefig(fig, facecolor=_CARD_BG); plt.close(fig)
 
         info = pdf.infodict()
-        info["Title"] = "QuantScopeX Free Strategy Diagnostic"
+        info["Title"] = "QuantScopeX 免费策略诊断" if lang == "zh" else "QuantScopeX Free Strategy Diagnostic"
         info["Author"] = "QuantScopeX"
-        info["Subject"] = "Historical strategy screening"
+        info["Subject"] = "历史策略筛查" if lang == "zh" else "Historical strategy screening"
     return out_path

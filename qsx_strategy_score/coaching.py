@@ -92,14 +92,14 @@ ISSUE_ADVICE = {
     "OVERFIT_SUSPECT_HOLDOUT": {
         "problem": {
             "en": "The later period is clearly weaker than the earlier one — possible overfitting.",
-            "zh": "后段明显比前段弱——可能过拟合了。"},
+            "zh": "后段明显比前段弱，可能存在过拟合。"},
         "direction": {
             "en": "Cut parameters and widen the test window to see whether the edge is stable.",
             "zh": "砍参数、拉宽测试区间，看优势稳不稳。"}},
     "RANDOM_CONTROL_WEAK_EDGE": {
         "problem": {
             "en": "Only marginally beats random timing — the edge is thin.",
-            "zh": "只比随机择时强一点点——优势很薄。"},
+            "zh": "只比随机择时强一点，优势很薄。"},
         "direction": {
             "en": "Strengthen the signal or tighten entry conditions so the edge is clearer.",
             "zh": "强化信号或收紧入场条件，让优势更清楚。"}},
@@ -110,7 +110,7 @@ ISSUE_ADVICE = {
         "direction": {
             "en": "Upload the K-line of the asset you traded to see whether you actually beat holding "
                   "or random timing.",
-            "zh": "上传你交易的那个资产的 K 线，看看到底有没有跑赢「持有」或「随机择时」。"}},
+            "zh": "上传交易资产的 K 线，检验策略是否跑赢买入持有或随机择时。"}},
     "DSR_FAIL": {
         "problem": {
             "en": "Given how many variants you tried, this Sharpe is what pure selection luck produces "

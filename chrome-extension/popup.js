@@ -8,25 +8,26 @@ const UI_COPY = {
     autoDetect: '自动检测',
     langLabel: '语言',
     strategyFileTitle: '选择策略文件',
-    strategyFileHint: 'CSV / TSV / Excel，最大 5MB',
+    strategyFileHint: 'CSV / TSV / Excel，最大 5 MB',
     benchmarkTitle: '可选：上传基准资产 K 线',
-    benchmarkHint: 'date + close/price，用它对比持有和随机择时',
+    benchmarkHint: '包含日期和收盘价，用于持有与随机择时对比',
     scoreButton: '开始评分',
-    uploadHelp: '支持收益序列、净值曲线、闭合交易记录，以及常见回测工具导出文件。',
+    uploadHelp: '支持收益序列、净值曲线、已平仓交易记录和常见回测导出文件。',
     freeRadarLink: '免费虚拟币顶底风险雷达',
-    loading: '正在分析策略...',
+    loading: '正在分析策略…',
     anotherButton: '分析另一个策略',
     errorTitle: '分析失败',
     retryButton: '返回重试',
     errorHint: '确认 API 可访问，并上传收益曲线、净值曲线或交易记录 CSV / Excel。',
     fallbackCtaTitle: '继续做完整策略尽调',
-    fallbackCtaBody: '免费评分已完成。下一步检查成本、滑点、黑天鹅窗口和真实 MTM 回撤。',
+    fallbackCtaBody: '免费评分已完成。下一步检查成本、滑点、极端行情窗口和真实逐日盯市回撤。',
     fallbackCtaButton: '查看完整报告',
     noAsset: '未评估',
-    customBenchmark: '自定义K线',
+    customBenchmark: '自定义基准',
     bundledBenchmark: '内置基准',
-    bars: 'bars',
+    bars: '个数据点',
     years: '年',
+    unknownError: '发生未知错误，请稍后重试。',
   },
   en: {
     apiLabel: 'API URL',
@@ -173,18 +174,18 @@ const DIAGNOSTIC_COPY = {
     issues: '主要问题 / 下一步',
     noDetails: '本次返回的是简版评分，没有可展开的诊断数据。',
     noData: '暂无可显示数据',
-    noIssues: '免费评分卡没有发现明确硬伤。下一步应检查成本、滑点、黑天鹅窗口和真实 MTM 回撤。',
+    noIssues: '未发现明确硬伤。仍建议检查成本、滑点、极端行情窗口和真实逐日盯市回撤。',
     sims: '次模拟',
     profit: '盈利概率',
-    cagrBand: 'CAGR 5-95%',
-    worst5: 'worst 5% MaxDD',
+    cagrBand: '年化收益率 5%–95%',
+    worst5: '最差 5% 最大回撤',
     strategy: '策略',
     buyHold: '买入持有',
-    calmarAlpha: '策略 - 持有',
+    calmarAlpha: '策略减买入持有',
     ddReduction: '回撤改善',
     retCapture: '收益捕获',
     overlap: '重叠区间',
-    edgePersistence: 'Edge 持续性',
+    edgePersistence: '优势持续性',
     evidence: '证据质量',
     dependency: '资产依赖',
     low: '低',
@@ -351,9 +352,9 @@ const DIAGNOSTIC_COPY = {
 const ARTIFACT_COPY = {
   zh: {
     title: '保存并分享这次结果',
-    subtitle: '分享成绩卡，或保存三页免费诊断报告。',
-    share: '分享成绩卡',
-    preparing: '生成中...',
+    subtitle: '分享评分卡，或保存三页免费诊断报告。',
+    share: '分享评分卡',
+    preparing: '正在生成…',
     png: '下载 PNG',
     pdf: '三页 PDF',
     email: '发送 PNG + PDF',
@@ -372,6 +373,29 @@ const ARTIFACT_COPY = {
     consent: 'Also send occasional QuantScopeX product updates. Optional; unsubscribe anytime.',
     sent: 'Sent. Check your inbox.',
     failed: 'That did not work. Please try again.',
+  },
+};
+
+const GRADE_COPY = {
+  zh: {
+    GOLD: '金牌',
+    SILVER: '银牌',
+    BRONZE: '铜牌',
+    PROVISIONAL: '暂定',
+    'NEEDS WORK': '需改进',
+    FLAGGED: '存疑',
+  },
+};
+
+const EDGE_COPY = {
+  zh: {
+    beat: '跑赢买入持有和随机择时',
+    hold_only: '跑赢买入持有，随机对照不可用',
+    lost: '未跑赢买入持有',
+    random_fail: '相比随机择时没有优势',
+    marginal: '优势很薄',
+    luck_unclear: '难以和运气区分',
+    not_evaluated: '未评估优势',
   },
 };
 
@@ -433,6 +457,14 @@ function uiCopy(lang = langInput?.value) {
 
 function artifactCopy(lang = langInput?.value) {
   return ARTIFACT_COPY[lang === 'zh' ? 'zh' : 'en'];
+}
+
+function localizedGrade(grade, lang = langInput.value) {
+  return GRADE_COPY[lang]?.[grade] || grade;
+}
+
+function localizedEdge(edge, lang = langInput.value) {
+  return EDGE_COPY[lang]?.[edge] || edge;
 }
 
 function localizedPillarName(name, data, lang = langInput.value) {
@@ -574,6 +606,7 @@ async function scoreFile() {
 
   const formData = new FormData();
   formData.append('file', state.file);
+  formData.append('lang', langInput.value);
   if (assetInput.value) formData.append('asset_key', assetInput.value);
   if (state.benchmarkFile) {
     formData.append('benchmark_file', state.benchmarkFile);
@@ -592,7 +625,7 @@ async function scoreFile() {
     renderResult(state.result);
     showView('result');
   } catch (error) {
-    document.getElementById('error-message').textContent = error.message || 'Unknown error';
+    document.getElementById('error-message').textContent = error.message || uiCopy().unknownError || 'Unknown error';
     document.getElementById('error-hint').textContent = uiCopy().errorHint;
     showView('error');
   }
@@ -747,7 +780,8 @@ function normalizeScorePayload(payload, lang) {
 function renderResult(data) {
   const display = Number(data.display ?? data.overall ?? 0);
   document.getElementById('score-number').textContent = Number.isFinite(display) ? display.toFixed(1) : '--';
-  document.getElementById('score-grade').textContent = data.grade || data.tier || data.judgement || '--';
+  const grade = data.grade || data.tier || data.judgement || '--';
+  document.getElementById('score-grade').textContent = localizedGrade(grade);
   document.getElementById('score-headline').textContent = data.headline_local || data.headline || '';
 
   const pillars = Object.entries(data.pillars || {});
@@ -769,7 +803,7 @@ function renderResult(data) {
   const source = meta.benchmark_source === 'custom_file' ? copy.customBenchmark : meta.benchmark_source === 'bundled_asset' ? copy.bundledBenchmark : '';
   const bars = meta.n ? `${meta.n} ${copy.bars}` : '';
   const years = meta.span_years ? `${Number(meta.span_years).toFixed(2)} ${copy.years}` : '';
-  const edge = data.lights?.edge ? `edge: ${data.lights.edge}` : '';
+  const edge = data.lights?.edge ? localizedEdge(data.lights.edge) : '';
   document.getElementById('meta-line').textContent = [asset, source, bars, years, edge].filter(Boolean).join(' · ');
 
   const flags = Array.isArray(data.flags) ? data.flags : [];

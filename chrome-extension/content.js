@@ -15,25 +15,25 @@
       assetLabel: '对比资产',
       benchmarkLabel: '自定义基准 K 线',
       benchmarkButton: '选择 K 线文件',
-      benchmarkHint: '可选：date + close/price，优先于资产下拉',
+      benchmarkHint: '可选：包含日期和收盘价，优先于资产下拉选项',
       selectFile: '选择文件',
-      helpTitle: '如何导出数据？',
-      help1: '打开 TradingView Strategy Tester',
-      help2: '点击 "List of Trades" 标签',
+      helpTitle: '如何从 TradingView 导出数据？',
+      help1: '打开 TradingView 策略测试器',
+      help2: '点击“交易列表”标签',
       help3: '点击右上角的下载图标',
-      help4: '选择 "Export to CSV" 或 "Export to Excel"',
-      loading: '正在分析策略...',
+      help4: '选择“导出 CSV”或“导出 Excel”',
+      loading: '正在分析策略…',
       failed: '分析失败',
-      failedHint: '请确保文件是从 TradingView Strategy Tester 导出的。',
-      sample: '样本量:',
+      failedHint: '请确认文件由 TradingView 策略测试器导出。',
+      sample: '样本量：',
       enough: '充足',
       thin: '偏小',
-      edge: 'Edge 检测:',
+      edge: '优势检验：',
       problems: '发现的问题',
       another: '分析另一个策略',
       fullReport: '查看完整报告',
       fallbackCtaTitle: '继续做完整策略尽调',
-      fallbackCtaBody: '免费评分已完成。下一步检查成本、滑点、黑天鹅窗口和真实 MTM 回撤。',
+      fallbackCtaBody: '免费评分已完成。下一步检查成本、滑点、极端行情窗口和真实逐日盯市回撤。',
     },
     en: {
       autoDetect: 'Auto-detect',
@@ -463,6 +463,7 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('lang', lang);
       const assetSelect = document.getElementById('qsx-asset-select');
       if (assetSelect?.value) {
         formData.append('asset_key', assetSelect.value);
@@ -545,7 +546,7 @@
           </div>
           <div class="qsx-score-grade">
             <span class="qsx-badge" style="background: ${gradeColors[data.grade] || '#666'}">
-              ${data.grade}
+              ${escapeHtml(localizedGrade(data.grade, lang))}
             </span>
           </div>
         </div>
@@ -577,7 +578,7 @@
             <span>${escapeHtml(c.edge)}</span>
             <span class="qsx-light-${escapeHtml(data.lights?.edge || '')}">
               ${edgeIcons[data.lights?.edge] || ''}
-              ${escapeHtml(data.lights?.edge || '-')}
+              ${escapeHtml(localizedEdge(data.lights?.edge, lang))}
             </span>
           </div>
         </div>
@@ -723,6 +724,35 @@
       },
     };
     return fallback[name]?.[lang] || name;
+  }
+
+  function localizedGrade(grade, lang = currentModalLang) {
+    const labels = {
+      zh: {
+        GOLD: '金牌',
+        SILVER: '银牌',
+        BRONZE: '铜牌',
+        PROVISIONAL: '暂定',
+        'NEEDS WORK': '需改进',
+        FLAGGED: '存疑',
+      },
+    };
+    return labels[lang]?.[grade] || grade || '-';
+  }
+
+  function localizedEdge(edge, lang = currentModalLang) {
+    const labels = {
+      zh: {
+        beat: '跑赢买入持有和随机择时',
+        hold_only: '跑赢买入持有，随机对照不可用',
+        lost: '未跑赢买入持有',
+        random_fail: '相比随机择时没有优势',
+        marginal: '优势很薄',
+        luck_unclear: '难以和运气区分',
+        not_evaluated: '未评估优势',
+      },
+    };
+    return labels[lang]?.[edge] || edge || '-';
   }
 
   function escapeHtml(value) {

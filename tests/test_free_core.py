@@ -24,7 +24,7 @@ from qsx_strategy_score.overlay_client import (
     trade_log_to_daily_overlay_returns,
 )
 from qsx_strategy_score.metrics import benchmark_compare
-from qsx_strategy_score.report import render_free_pdf, render_unified_png
+from qsx_strategy_score.report import _png_grade, render_free_pdf, render_unified_png
 from qsx_strategy_score.scoring import overfit_risk_score
 from qsx_strategy_score.report_preflight import preflight_score_upload
 
@@ -417,6 +417,75 @@ def test_supported_languages_have_complete_core_messages():
     base = set(MESSAGES["en"])
     for lang in SUPPORTED_LANGS:
         assert not (base - set(MESSAGES[lang])), lang
+
+
+def _javascript_locale_block(source: str, table: str, locale: str = "zh") -> str:
+    table_start = source.index(f"const {table} = {{")
+    lines = source[table_start:].splitlines()
+    locale_start = next(index for index, line in enumerate(lines) if line.strip() == f"{locale}: {{")
+    next_locale = next(index for index, line in enumerate(lines[locale_start + 1:], locale_start + 1)
+                       if line.strip() == "en: {")
+    return "\n".join(lines[locale_start:next_locale])
+
+
+def test_chrome_score_requests_forward_selected_language():
+    popup = (ROOT / "chrome-extension" / "popup.js").read_text()
+    content = (ROOT / "chrome-extension" / "content.js").read_text()
+
+    assert "formData.append('lang', langInput.value);" in popup
+    assert "formData.append('lang', lang);" in content
+
+
+def test_chrome_chinese_copy_has_no_known_english_leaks():
+    popup = (ROOT / "chrome-extension" / "popup.js").read_text()
+    content = (ROOT / "chrome-extension" / "content.js").read_text()
+    smart_cta = (ROOT / "chrome-extension" / "smart-cta.js").read_text()
+
+    blocks = [
+        _javascript_locale_block(popup, "UI_COPY"),
+        _javascript_locale_block(popup, "DIAGNOSTIC_COPY"),
+        _javascript_locale_block(content, "MODAL_COPY"),
+        _javascript_locale_block(smart_cta, "COPY"),
+    ]
+    forbidden = ("date + close", "worst 5% MaxDD", "Edge 持续性", "Edge 检测", " MTM ", " vs ")
+    for block in blocks:
+        assert not [term for term in forbidden if term in block]
+
+
+def test_chinese_core_copy_and_grade_are_localized():
+    forbidden = (" Lite", " X-Ray", " MTM", " vs ", "——")
+    assert not [
+        (key, term)
+        for key, value in MESSAGES["zh"].items()
+        for term in forbidden
+        if term in value
+    ]
+    assert _png_grade("PROVISIONAL", "zh") == "暂定"
+    assert _png_grade("NEEDS WORK", "zh") == "需改进"
+
+
+def test_chinese_cli_has_no_known_english_result_leaks():
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "qsx_strategy_score.cli",
+            str(ROOT / "examples" / "sample_returns.csv"),
+            "--lang",
+            "zh",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    output = proc.stdout + proc.stderr
+    assert "未自动识别出交易资产" in output
+    assert "蒙特卡洛" in output
+    for leak in ("no asset auto-detected", "Monte Carlo", "worst-5% MaxDD", "note: input_type"):
+        assert leak not in output
 
 
 def test_filename_resolves_asset_for_low_frequency_log():

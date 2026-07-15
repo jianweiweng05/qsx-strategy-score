@@ -905,7 +905,7 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
     if too_good:
         headline = ("Looks too good to be true — verify the backtest (look-ahead / survivorship / "
                     "fills) before trusting any score.")
-        headline_zh = "看着好得不真实——先核回测（未来函数 / 幸存者偏差 / 成交假设），再信任何分数。"
+        headline_zh = "看着好得不真实。先核查未来函数、幸存者偏差和成交假设，再相信分数。"
     elif cagr_full <= 0:
         headline = "Not net profitable over the sample."
         headline_zh = "整个样本上没赚钱。"
@@ -914,24 +914,24 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         cap = f" (captured {rcap:.1f}x of holding)" if (rcap == rcap and rcap is not None) else ""
         cap_zh = f"（只抓到持有的 {rcap:.1f} 倍）" if (rcap == rcap and rcap is not None) else ""
         headline = f"Did NOT beat buy & hold{cap} — most of the return is just owning the asset."
-        headline_zh = f"没跑赢「买入持有」{cap_zh}——大部分收益只是持有这个资产本身。"
+        headline_zh = f"没跑赢买入持有{cap_zh}。大部分收益只是持有这个资产本身。"
     elif edge_light == "random_fail":
         headline = f"Indistinguishable from random timing (p={rand_p:.2f}) — no proven timing edge."
-        headline_zh = f"和随机择时无法区分（p={rand_p:.2f}）——未证明有择时优势。"
+        headline_zh = f"和随机择时无法区分（p={rand_p:.2f}），尚未证明有择时优势。"
     elif dsr is not None and n_trials > 1 and dsr < 0.50:
         headline = (f"After {n_trials} search trials, this Sharpe is what selection luck "
                     f"produces (DSR {dsr:.0%}).")
         headline_zh = f"试了 {n_trials} 次海选后，这条夏普就是选优运气能做出来的（DSR {dsr:.0%}）。"
     elif sample_hard:
         headline = "Sample too small — score is provisional; not enough track record to trust."
-        headline_zh = "样本太小——结论暂定；历史不足以信任。"
+        headline_zh = "样本太小，结论暂定。现有历史不足以建立信心。"
     elif oos is not None and oos["oos_cagr"] <= 0:
         headline = "The later 30% window lost money — the earlier result did not persist."
-        headline_zh = "后 30% 时间窗口亏钱——前段表现没有延续。"
+        headline_zh = "后 30% 时间窗口亏损，前段表现没有延续。"
     elif edge_light == "beat" and exp:
         headline = (f"Passed the available benchmark and proxy random-control checks — now prove it over "
                     f"{EXPERIENCE_MIN_YEARS:.0f}+ years of history.")
-        headline_zh = f"通过当前基准与代理随机对照——还需用 {EXPERIENCE_MIN_YEARS:.0f}+ 年历史验证。"
+        headline_zh = f"通过当前基准与代理随机对照，还需至少 {EXPERIENCE_MIN_YEARS:.0f} 年历史验证。"
     elif edge_light == "beat":
         if rand_p is not None:
             headline = (f"Passed the available benchmark and proxy random-control checks (p={rand_p:.2f}); "
@@ -945,17 +945,17 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         headline_zh = "跑赢买入持有，但随机择时证据不可用。"
     elif edge_light == "marginal":
         headline = "Barely beat holding / random timing — a weak, not-clearly-skill edge."
-        headline_zh = "勉强跑赢持有 / 随机择时——优势弱，说不上是本事。"
+        headline_zh = "仅勉强跑赢买入持有和随机择时，优势很弱，尚不能证明是策略能力。"
     elif edge_light == "luck_unclear":
         if psr == psr and psr is not None:
             headline = f"Hard to tell from luck (PSR {psr:.2f}) — add the asset's K-line to test vs buy & hold."
-            headline_zh = f"难以和运气区分（PSR {psr:.2f}）——加上资产 K 线来对比买入持有。"
+            headline_zh = f"难以和运气区分（PSR {psr:.2f}）。请加入资产 K 线，与买入持有对比。"
         else:
             headline = "Add the asset's K-line to test vs buy & hold / random timing."
-            headline_zh = "加上资产 K 线，对比买入持有 / 随机择时。"
+            headline_zh = "请加入资产 K 线，与买入持有和随机择时对比。"
     else:
         headline = "Add the K-line of the asset you traded to see if you beat holding / random timing."
-        headline_zh = "加上你交易的那个资产的 K 线，看看有没有跑赢持有 / 随机择时。"
+        headline_zh = "上传交易资产价格，检验能否跑赢买入持有和随机择时。"
 
     meta.update(dict(
         headline_zh=headline_zh,

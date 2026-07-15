@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from typing import Optional
 
@@ -19,6 +20,24 @@ from .metrics import benchmark_compare, monte_carlo
 from .profiles import PROFILE_NAMES
 from .report import render_free_pdf, render_unified_text, render_unified_png
 from .i18n import SUPPORTED_LANGS, normalize_lang
+
+
+def _localized_warning(message: str, lang: str) -> str:
+    if lang != "zh":
+        return message
+    auto = re.match(r"input_type auto-detected as '([^']+)' \((.+)\)$", message)
+    if auto:
+        input_type = {"returns": "收益率序列", "equity": "净值序列"}.get(auto.group(1), auto.group(1))
+        return f"已自动识别输入类型：{input_type}"
+    dropped = re.match(r"dropped (\d+) row\(s\) with unparseable date/value", message)
+    if dropped:
+        return f"已丢弃 {dropped.group(1)} 行无法解析的日期或数值"
+    percent = re.match(r"column '(.+)' had '%' signs .+", message)
+    if percent:
+        return f"列“{percent.group(1)}”包含百分号，已按百分数换算"
+    if message == "degenerate time span; ppy fell back to 252.":
+        return "时间跨度无效，年化周期数已回退为 252"
+    return f"数据处理提示：{message}"
 
 
 def main(argv: Optional[list] = None) -> int:
@@ -118,36 +137,53 @@ def main(argv: Optional[list] = None) -> int:
     if detection is not None:
         if detection.best is not None:
             b = detection.best
-            print(f"\n  \U0001F50D auto-detected asset: {b.key} ({b.name}) · confidence {detection.confidence}")
+            if lang == "zh":
+                confidence = {"high": "高", "medium": "中", "low": "低"}.get(detection.confidence, detection.confidence)
+                print(f"\n  \U0001F50D 自动识别资产：{b.key}（{b.name}） · 置信度 {confidence}")
+            else:
+                print(f"\n  \U0001F50D auto-detected asset: {b.key} ({b.name}) · confidence {detection.confidence}")
             alts = ", ".join(f"{m.key}({m.corr:+.2f})" for m in detection.alternatives[:3]
                              if m.corr == m.corr)
             if alts:
-                print(f"     not right? try: {alts}  ·  override with  --asset KEY")
+                if lang == "zh":
+                    print(f"     若识别不正确，可尝试：{alts} · 使用 --asset KEY 手动指定")
+                else:
+                    print(f"     not right? try: {alts}  ·  override with  --asset KEY")
         else:
-            print(f"\n  \U0001F50D no asset auto-detected — {detection.reason}")
-            print("     pick one with  --asset KEY  (see --list-assets) or pass  --benchmark your_kline.csv")
+            if lang == "zh":
+                print("\n  \U0001F50D 未自动识别出交易资产。")
+                print("     请使用 --asset KEY 手动选择，或用 --benchmark 上传资产 K 线。")
+            else:
+                print(f"\n  \U0001F50D no asset auto-detected — {detection.reason}")
+                print("     pick one with  --asset KEY  (see --list-assets) or pass  --benchmark your_kline.csv")
 
     mc = monte_carlo(r, report.meta["ppy"])
     if mc:
         pp = ">99" if mc["prob_loss"] < 0.005 else f"{(1 - mc['prob_loss'])*100:.0f}"
-        print(f"  Monte Carlo ({mc['n_sims']}x): CAGR 5-95% "
-              f"{mc['cagr_p5']*100:.0f}%..{mc['cagr_p95']*100:.0f}%  ·  worst-5% MaxDD "
-              f"{mc['maxdd_worst5']*100:.0f}%  ·  P(profit) {pp}%")
+        if lang == "zh":
+            print(f"  蒙特卡洛（{mc['n_sims']} 次）：年化收益率 5%–95% "
+                  f"{mc['cagr_p5']*100:.0f}% 至 {mc['cagr_p95']*100:.0f}% · 最差 5% 最大回撤 "
+                  f"{mc['maxdd_worst5']*100:.0f}% · 盈利概率 {pp}%")
+        else:
+            print(f"  Monte Carlo ({mc['n_sims']}x): CAGR 5-95% "
+                  f"{mc['cagr_p5']*100:.0f}%..{mc['cagr_p95']*100:.0f}%  ·  worst-5% MaxDD "
+                  f"{mc['maxdd_worst5']*100:.0f}%  ·  P(profit) {pp}%")
 
     for w in meta.get("warnings", []):
-        print(f"  note: {w}", file=sys.stderr)
+        label = "提示" if lang == "zh" else "note"
+        print(f"  {label}: {_localized_warning(w, lang)}", file=sys.stderr)
 
     if a.out:
         try:
             render_unified_png(
                 report, r, a.out, bench=bench_cmp, lang=lang, triage=triage)
-            print(f"\nwrote report card -> {a.out}")
+            print(f"\n{'已生成评分卡' if lang == 'zh' else 'wrote report card'} -> {a.out}")
         except Exception as e:  # noqa: BLE001
             print(f"warning: PNG not written: {e}", file=sys.stderr)
     if a.pdf:
         try:
             render_free_pdf(report, r, a.pdf, bench=bench_cmp, lang=lang, triage=triage)
-            print(f"wrote free diagnostic PDF -> {a.pdf}")
+            print(f"{'已生成免费诊断 PDF' if lang == 'zh' else 'wrote free diagnostic PDF'} -> {a.pdf}")
         except Exception as e:  # noqa: BLE001
             print(f"warning: PDF not written: {e}", file=sys.stderr)
     if a.json:
@@ -156,7 +192,7 @@ def main(argv: Optional[list] = None) -> int:
             out["triage"] = triage
             out["lang"] = lang
             json.dump(out, f, indent=2, default=str, ensure_ascii=False)
-        print(f"wrote report json -> {a.json}")
+        print(f"{'已生成报告 JSON' if lang == 'zh' else 'wrote report json'} -> {a.json}")
     return 0
 
 
