@@ -494,9 +494,9 @@ def test_chrome_release_metadata_and_share_copy_cover_all_locales():
     popup_html = (ROOT / "chrome-extension" / "popup.html").read_text()
     popup = (ROOT / "chrome-extension" / "popup.js").read_text()
 
-    assert manifest["version"] == "1.3.0"
+    assert manifest["version"] == "1.3.1"
     assert 'id="app-version"' in popup_html
-    assert '>v1.3.0</span>' in popup_html
+    assert '>v1.3.1</span>' in popup_html
     assert "const SHARE_COPY = {" in popup
     for locale in SUPPORTED_LANGS:
         assert f"{locale}:" in popup or f"'{locale}':" in popup

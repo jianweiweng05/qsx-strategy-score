@@ -1,6 +1,6 @@
 # QSX Strategy Score
 
-Version 1.3.0 completes Chinese, Japanese, Korean, Spanish, and Brazilian Portuguese result and artifact delivery. Grade, edge, headline, sharing controls, PNG, and the three-page PDF now keep the selected language. PDF files use the corrected measured-width CJK layout from public core v0.3.3.
+Version 1.3.1 completes Chinese, Japanese, Korean, Spanish, and Brazilian Portuguese result and artifact delivery, including dynamic anomaly and risk messages. Grade, edge, headline, sharing controls, PNG, and the three-page PDF now keep the selected language. PDF files use the corrected measured-width CJK layout from public core v0.3.3.
 
 Chrome extension for scoring strategy files with QSX Strategy Score.
 

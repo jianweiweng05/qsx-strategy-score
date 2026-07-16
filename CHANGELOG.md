@@ -2,6 +2,12 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## Chrome 1.3.1 - Localized dynamic diagnostics
+
+### Fixed
+
+- Chrome now receives localized anomaly and risk messages from the shared service for all six supported languages, including autocorrelation, Sharpe, smoothness, CAGR, Calmar, and growth checks.
+
 ## v0.3.4 — Localized dynamic diagnostic flags
 
 ### Fixed
