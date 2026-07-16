@@ -1,6 +1,6 @@
 # QSX Strategy Score
 
-Version 1.2.0 adds a core-rendered PNG scorecard, a three-page free diagnostic PDF, native file sharing, X/LinkedIn/Reddit links, and optional email delivery. These artifacts call the official website endpoints and are generated from the same public scoring core as the CLI and website.
+Version 1.3.0 completes Chinese, Japanese, Korean, Spanish, and Brazilian Portuguese result and artifact delivery. Grade, edge, headline, sharing controls, PNG, and the three-page PDF now keep the selected language. PDF files use the corrected measured-width CJK layout from public core v0.3.3.
 
 Chrome extension for scoring strategy files with QSX Strategy Score.
 

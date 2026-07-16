@@ -396,6 +396,15 @@ const ARTIFACT_COPY = {
   },
 };
 
+const SHARE_COPY = {
+  en: (score) => `My QuantScopeX strategy score is ${score}/100`,
+  zh: (score) => `我的 QuantScopeX 策略评分是 ${score}/100`,
+  ja: (score) => `私の QuantScopeX 戦略スコアは ${score}/100 です`,
+  ko: (score) => `내 QuantScopeX 전략 점수는 ${score}/100입니다`,
+  es: (score) => `Mi puntuación de estrategia QuantScopeX es ${score}/100`,
+  'pt-BR': (score) => `Minha pontuação de estratégia QuantScopeX é ${score}/100`,
+};
+
 const GRADE_COPY = {
   zh: {
     GOLD: '金牌',
@@ -487,6 +496,10 @@ function uiCopy(lang = langInput?.value) {
 
 function artifactCopy(lang = langInput?.value) {
   return ARTIFACT_COPY[lang] || ARTIFACT_COPY.en;
+}
+
+function shareCopy(score, lang = langInput?.value) {
+  return (SHARE_COPY[lang] || SHARE_COPY.en)(score);
 }
 
 function localizedGrade(grade, lang = langInput.value) {
@@ -733,7 +746,7 @@ async function shareScorecard() {
     const score = state.result?.display ?? state.result?.overall ?? '-';
     const shareData = {
       title: 'QuantScopeX Strategy Score',
-      text: langInput.value === 'zh' ? `我的策略评分：${score}/100` : `My strategy score: ${score}/100`,
+      text: shareCopy(score),
       files: [card],
     };
     if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
@@ -753,10 +766,9 @@ async function shareScorecard() {
 
 function sharePlatform(platform) {
   const score = state.result?.display ?? state.result?.overall ?? '-';
-  const scoreUrl = `https://www.quantscopex.com/${langInput.value === 'zh' ? 'zh/' : ''}score`;
-  const title = langInput.value === 'zh'
-    ? `我的 QuantScopeX 策略评分是 ${score}/100`
-    : `My QuantScopeX strategy score is ${score}/100`;
+  const localePath = langInput.value === 'en' ? '' : `${langInput.value}/`;
+  const scoreUrl = `https://www.quantscopex.com/${localePath}score`;
+  const title = shareCopy(score);
   const urls = {
     x: `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(scoreUrl)}`,
     linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(scoreUrl)}`,

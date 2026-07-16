@@ -2,6 +2,14 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## Chrome 1.3.0 - Complete multilingual artifacts
+
+### Fixed
+
+- Chinese, Japanese, Korean, Spanish, and Brazilian Portuguese now keep the selected language across score results, native/social sharing, PNG, PDF, and email artifact requests.
+- Downloaded PDFs use the public core v0.3.3 measured-width CJK wrapping, punctuation-aware line breaking, and six-language headings.
+- Added release regressions for language forwarding, localized result labels, and package version consistency.
+
 ## v0.3.3 — CJK punctuation line breaking
 
 ### Fixed

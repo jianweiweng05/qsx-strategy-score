@@ -472,6 +472,22 @@ def test_chrome_score_requests_forward_selected_language():
     assert "report.headline_local || report.meta?.headline_local" in content
 
 
+def test_chrome_release_metadata_and_share_copy_cover_all_locales():
+    manifest = json.loads((ROOT / "chrome-extension" / "manifest.json").read_text())
+    popup_html = (ROOT / "chrome-extension" / "popup.html").read_text()
+    popup = (ROOT / "chrome-extension" / "popup.js").read_text()
+
+    assert manifest["version"] == "1.3.0"
+    assert 'id="app-version"' in popup_html
+    assert '>v1.3.0</span>' in popup_html
+    assert "const SHARE_COPY = {" in popup
+    for locale in SUPPORTED_LANGS:
+        assert f"{locale}:" in popup or f"'{locale}':" in popup
+    assert "text: shareCopy(score)" in popup
+    assert "const title = shareCopy(score);" in popup
+    assert "langInput.value === 'en' ? '' : `${langInput.value}/`" in popup
+
+
 def test_chrome_supported_locales_render_grade_and_edge_labels():
     popup = (ROOT / "chrome-extension" / "popup.js").read_text()
     content = (ROOT / "chrome-extension" / "content.js").read_text()
