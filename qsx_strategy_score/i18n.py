@@ -739,6 +739,113 @@ def normalize_lang(lang: str | None) -> str:
     return _ALIASES.get(base, base) if _ALIASES.get(base, base) in SUPPORTED_LANGS else "en"
 
 
+def localize_flag_message(code: str | None, message: str | None, lang: str | None = "en") -> str:
+    """Translate user-facing scoring flags, including numeric diagnostics.
+
+    Flag ``msg`` remains the stable English machine-facing field.  Clients use
+    this companion value so dynamic values such as autocorrelation, Sharpe,
+    CAGR, and drawdown remain visible without leaking the English template.
+    """
+    lang = normalize_lang(lang)
+    code = str(code or "")
+    raw = str(message or "")
+    static_keys = {
+        "TOO_GOOD_TO_BE_TRUE": "issue.TOO_GOOD_TO_BE_TRUE.problem",
+        "BACKGROUND_REQUIRED": "issue.BACKGROUND_REQUIRED.problem",
+        "LOW_FREQUENCY": "issue.LOW_FREQUENCY.problem",
+        "INSUFFICIENT_SAMPLE": "issue.INSUFFICIENT_SAMPLE.problem",
+        "RANDOM_CONTROL_WEAK_EDGE": "issue.RANDOM_CONTROL_WEAK_EDGE.problem",
+        "RANDOM_CONTROL_UNAVAILABLE": "issue.RANDOM_CONTROL_UNAVAILABLE.problem",
+        "EDGE_HARD_TO_DISTINGUISH_FROM_LUCK": "issue.EDGE_HARD_TO_DISTINGUISH_FROM_LUCK.problem",
+        "NEGATIVE_RETURN": "issue.NEGATIVE_RETURN.problem",
+        "OOS_NEGATIVE_RETURN": "issue.OOS_NEGATIVE_RETURN.problem",
+        "UNDERPERFORMS_HOLD_RISKADJ": "issue.UNDERPERFORMS_HOLD_RISKADJ.problem",
+        "RANDOM_CONTROL_NOT_BEATEN": "issue.RANDOM_CONTROL_NOT_BEATEN.problem",
+        "OVERFIT_SUSPECT_HOLDOUT": "issue.OVERFIT_SUSPECT_HOLDOUT.problem",
+        "DSR_FAIL": "issue.DSR_FAIL.problem",
+        "DSR_OVERFIT_RISK": "issue.DSR_OVERFIT_RISK.problem",
+        "SHORT_TRACK_RECORD": "issue.SHORT_TRACK_RECORD.problem",
+        "LOW_EFFECTIVE_SAMPLE": "issue.LOW_EFFECTIVE_SAMPLE.problem",
+    }
+    key = static_keys.get(code)
+    if key and has_message(key, lang):
+        return t(key, lang)
+
+    m = re.search(r"lag-1 return autocorr ([0-9.\-]+)", raw)
+    if code == "STALE_OR_INTERPOLATED" and m:
+        value = m.group(1)
+        return {
+            "en": f"Lag-1 return autocorrelation is {value}: equity may be interpolated or stale-marked.",
+            "zh": f"一阶收益自相关为 {value}：净值曲线可能经过插值或被标记为不变。",
+            "ja": f"1期リターン自己相関は {value}：株価曲線が補間または据え置き処理された可能性があります。",
+            "ko": f"1시차 수익 자기상관은 {value}입니다. 자산 곡선이 보간되었거나 고정 표시되었을 수 있습니다.",
+            "es": f"La autocorrelación de retorno de primer rezago es {value}: la curva puede estar interpolada o marcada como estática.",
+            "pt-BR": f"A autocorrelação do retorno no primeiro lag é {value}: a curva pode ter sido interpolada ou marcada como estática.",
+        }[lang]
+
+    m = re.search(r"annualized Sharpe ([0-9.\-]+)", raw)
+    if code == "SHARPE_TOO_GOOD" and m:
+        value = m.group(1)
+        return {
+            "en": f"Annualized Sharpe {value} is implausibly high for this asset class.",
+            "zh": f"年化夏普 {value} 对该资产类别来说异常高。",
+            "ja": f"年率換算Sharpe {value} はこの資産クラスには不自然に高すぎます。",
+            "ko": f"연환산 Sharpe {value}은(는) 이 자산군에 비해 비현실적으로 높습니다.",
+            "es": f"El Sharpe anualizado {value} es inverosímilmente alto para esta clase de activo.",
+            "pt-BR": f"O Sharpe anualizado {value} é implausivelmente alto para esta classe de ativo.",
+        }[lang]
+
+    m = re.search(r"([0-9.]+)% of periods positive with only ([0-9.\-]+)% drawdown", raw)
+    if code == "NEAR_MONOTONIC" and m:
+        positive, drawdown = m.groups()
+        return {
+            "en": f"{positive}% of periods are positive with only {drawdown}% drawdown: suspiciously smooth.",
+            "zh": f"{positive}% 的时间段为正，回撤却只有 {drawdown}%：曲线异常平滑。",
+            "ja": f"期間の {positive}% がプラスで、ドローダウンは {drawdown}% のみ：不自然に滑らかです。",
+            "ko": f"전체 구간의 {positive}%가 플러스인데 낙폭은 {drawdown}%에 불과합니다. 지나치게 매끄럽습니다.",
+            "es": f"El {positive}% de los periodos es positivo con solo {drawdown}% de drawdown: demasiado uniforme.",
+            "pt-BR": f"{positive}% dos períodos são positivos com apenas {drawdown}% de drawdown: suavidade suspeita.",
+        }[lang]
+
+    if code == "BACKGROUND_CAGR":
+        m = re.search(r"CAGR ([0-9.\-]+)%/yr sustained over ([0-9.]+)y", raw)
+        if m:
+            cagr, years = m.groups()
+            return {
+                "en": f"CAGR {cagr}%/yr sustained for {years} years: verify capital, leverage, fills, and capacity.",
+                "zh": f"年化收益率 {cagr}% 持续 {years} 年：核实本金、杠杆、成交和容量。",
+                "ja": f"年率 {cagr}% が {years} 年継続：元本、レバレッジ、約定、容量を確認してください。",
+                "ko": f"연환산 수익률 {cagr}%가 {years}년 지속되었습니다. 원금, 레버리지, 체결, 수용력을 확인하세요.",
+                "es": f"CAGR del {cagr}%/año durante {years} años: verifica capital, apalancamiento, ejecuciones y capacidad.",
+                "pt-BR": f"CAGR de {cagr}%/ano por {years} anos: verifique capital, alavancagem, execuções e capacidade.",
+            }[lang]
+    if code == "BACKGROUND_CALMAR":
+        m = re.search(r"Calmar ([0-9.\-]+) \(>10\)", raw)
+        if m:
+            value = m.group(1)
+            return {
+                "en": f"Calmar {value} (>10): verify mark-to-market drawdowns, leverage, and fills before treating it as scalable.",
+                "zh": f"Calmar {value}（>10）：把它当作可扩展结果前，先核实逐日盯市回撤、杠杆和成交。",
+                "ja": f"Calmar {value}（>10）：拡張可能とみなす前に、時価評価ドローダウン、レバレッジ、約定を確認してください。",
+                "ko": f"Calmar {value}(>10)입니다. 확장 가능한 결과로 보기 전에 시가평가 낙폭, 레버리지, 체결을 확인하세요.",
+                "es": f"Calmar {value} (>10): verifica drawdown a mercado, apalancamiento y ejecuciones antes de escalarlo.",
+                "pt-BR": f"Calmar {value} (>10): verifique drawdown a mercado, alavancagem e execuções antes de tratá-lo como escalável.",
+            }[lang]
+    if code == "BACKGROUND_GROWTH":
+        m = re.search(r"equity grew ([0-9,]+)x over the sample", raw)
+        if m:
+            value = m.group(1)
+            return {
+                "en": f"Equity grew {value}x over the sample: verify capital base, leverage, liquidity, and survivorship.",
+                "zh": f"样本期净值增长 {value} 倍：核实本金、杠杆、流动性和幸存者偏差。",
+                "ja": f"サンプル期間で株価曲線が {value} 倍に成長：元本、レバレッジ、流動性、生存者バイアスを確認してください。",
+                "ko": f"표본 기간 자산 곡선이 {value}배 증가했습니다. 원금, 레버리지, 유동성, 생존자 편향을 확인하세요.",
+                "es": f"El capital creció {value}x en la muestra: verifica base de capital, apalancamiento, liquidez y supervivencia.",
+                "pt-BR": f"O patrimônio cresceu {value}x na amostra: verifique capital, alavancagem, liquidez e sobrevivência.",
+            }[lang]
+    return raw
+
+
 def t(key: str, lang: str | None = "en", **kwargs: Any) -> str:
     lang = normalize_lang(lang)
     text = MESSAGES.get(lang, {}).get(key) or MESSAGES["en"].get(key) or key

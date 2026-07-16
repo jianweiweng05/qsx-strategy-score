@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 from qsx_strategy_score import build_triage_diagnostics, load_returns, score_unified
 from qsx_strategy_score.asset_library import key_from_filename
-from qsx_strategy_score.i18n import MESSAGES, SUPPORTED_LANGS
+from qsx_strategy_score.i18n import MESSAGES, SUPPORTED_LANGS, localize_flag_message
 from qsx_strategy_score.overlay_client import (
     OverlayPreviewError,
     normalize_daily_returns,
@@ -450,6 +450,23 @@ def test_supported_languages_have_complete_core_messages():
     base = set(MESSAGES["en"])
     for lang in SUPPORTED_LANGS:
         assert not (base - set(MESSAGES[lang])), lang
+
+
+def test_dynamic_flag_messages_are_localized_for_all_supported_languages():
+    samples = {
+        "STALE_OR_INTERPOLATED": "lag-1 return autocorr 0.60: equity may be interpolated or stale-marked",
+        "SHARPE_TOO_GOOD": "annualized Sharpe 32.6 is implausibly high for this asset class",
+        "NEAR_MONOTONIC": "95% of periods positive with only -0.2% drawdown: suspiciously smooth",
+        "BACKGROUND_CAGR": "CAGR 120%/yr sustained over 2.2y — verify starting capital, leverage, venue fills, capacity and whether this was selected from many variants",
+    }
+    for code, message in samples.items():
+        localized = {lang: localize_flag_message(code, message, lang) for lang in SUPPORTED_LANGS}
+        assert all(localized.values())
+        assert localized["zh"] != message
+        assert localized["ja"] != message
+        assert localized["ko"] != message
+        assert localized["es"] != message
+        assert localized["pt-BR"] != message
 
 
 def _javascript_locale_block(source: str, table: str, locale: str = "zh") -> str:

@@ -2,6 +2,13 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## v0.3.4 — Localized dynamic diagnostic flags
+
+### Fixed
+
+- Added selected-language text for dynamic anomaly flags (autocorrelation, Sharpe, smoothness, CAGR, Calmar, and growth) across the service, website, and Chrome extension.
+- Preserved stable English machine messages while exposing `msg_local`, `problem_local`, and `direction_local` for clients.
+
 ## Chrome 1.3.0 - Complete multilingual artifacts
 
 ### Fixed
