@@ -78,7 +78,7 @@ const UI_COPY = {
     noAsset: '未評価',
     customBenchmark: 'カスタムKライン',
     bundledBenchmark: '内蔵ベンチマーク',
-    bars: 'bars',
+    bars: 'データ点',
     years: '年',
   },
   ko: {
@@ -104,7 +104,7 @@ const UI_COPY = {
     noAsset: '미평가',
     customBenchmark: '사용자 K-line',
     bundledBenchmark: '내장 기준',
-    bars: 'bars',
+    bars: '개 데이터 포인트',
     years: '년',
   },
   es: {
@@ -130,7 +130,7 @@ const UI_COPY = {
     noAsset: 'no evaluado',
     customBenchmark: 'K-line personalizada',
     bundledBenchmark: 'benchmark incluido',
-    bars: 'bars',
+    bars: 'datos',
     years: 'años',
   },
   'pt-BR': {
@@ -156,7 +156,7 @@ const UI_COPY = {
     noAsset: 'não avaliado',
     customBenchmark: 'K-line personalizada',
     bundledBenchmark: 'benchmark incluído',
-    bars: 'bars',
+    bars: 'pontos de dados',
     years: 'anos',
   },
 };

@@ -494,15 +494,20 @@ def test_chrome_release_metadata_and_share_copy_cover_all_locales():
     popup_html = (ROOT / "chrome-extension" / "popup.html").read_text()
     popup = (ROOT / "chrome-extension" / "popup.js").read_text()
 
-    assert manifest["version"] == "1.3.1"
+    assert manifest["version"] == "1.3.2"
     assert 'id="app-version"' in popup_html
-    assert '>v1.3.1</span>' in popup_html
+    assert '>v1.3.2</span>' in popup_html
     assert "const SHARE_COPY = {" in popup
     for locale in SUPPORTED_LANGS:
         assert f"{locale}:" in popup or f"'{locale}':" in popup
     assert "text: shareCopy(score)" in popup
     assert "const title = shareCopy(score);" in popup
     assert "langInput.value === 'en' ? '' : `${langInput.value}/`" in popup
+    assert "ja: {" in popup and "bars: 'データ点'" in popup
+    assert "ko: {" in popup and "bars: '개 데이터 포인트'" in popup
+    assert "es: {" in popup and "bars: 'datos'" in popup
+    assert "'pt-BR': {" in popup and "bars: 'pontos de dados'" in popup
+    assert popup.count("bars: 'bars'") == 1
 
 
 def test_chrome_supported_locales_render_grade_and_edge_labels():

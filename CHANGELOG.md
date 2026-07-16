@@ -2,6 +2,12 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## Chrome 1.3.2 - Localized sample units
+
+### Fixed
+
+- Replaced the remaining English `bars` unit in Japanese, Korean, Spanish, and Brazilian Portuguese result metadata.
+
 ## Chrome 1.3.1 - Localized dynamic diagnostics
 
 ### Fixed
