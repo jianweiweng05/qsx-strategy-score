@@ -434,6 +434,20 @@ def test_chrome_score_requests_forward_selected_language():
 
     assert "formData.append('lang', langInput.value);" in popup
     assert "formData.append('lang', lang);" in content
+    assert "formData.append('lang', langInput.value);" in popup
+    assert "report.headline_local || report.meta?.headline_local" in popup
+    assert "report.headline_local || report.meta?.headline_local" in content
+
+
+def test_chrome_supported_locales_render_grade_and_edge_labels():
+    popup = (ROOT / "chrome-extension" / "popup.js").read_text()
+    content = (ROOT / "chrome-extension" / "content.js").read_text()
+    for source in (popup, content):
+        for locale in ("ja", "ko", "es", "pt-BR"):
+            assert f"{locale}:" in source or f"'{locale}':" in source
+        assert "ゴールド" in source
+        assert "골드" in source
+        assert "supera hold" in source or "supera buy & hold" in source
 
 
 def test_chrome_chinese_copy_has_no_known_english_leaks():

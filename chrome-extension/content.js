@@ -508,7 +508,7 @@
       ...report,
       pillars,
       triage: payload.triage,
-      headline_local: lang === 'zh' ? (report.meta?.headline_zh || report.headline) : report.headline,
+      headline_local: report.headline_local || report.meta?.headline_local || (lang === 'zh' ? (report.meta?.headline_zh || report.headline) : report.headline),
       meta: { ...(report.meta || {}), resolved_asset: payload.resolved_asset || null },
     };
   }
@@ -736,6 +736,11 @@
         'NEEDS WORK': '需改进',
         FLAGGED: '存疑',
       },
+      en: { GOLD: 'Gold', SILVER: 'Silver', BRONZE: 'Bronze', PROVISIONAL: 'Provisional', 'NEEDS WORK': 'Needs work', FLAGGED: 'Flagged' },
+      ja: { GOLD: 'ゴールド', SILVER: 'シルバー', BRONZE: 'ブロンズ', PROVISIONAL: '暫定', 'NEEDS WORK': '要改善', FLAGGED: '要検証' },
+      ko: { GOLD: '골드', SILVER: '실버', BRONZE: '브론즈', PROVISIONAL: '잠정', 'NEEDS WORK': '개선 필요', FLAGGED: '검증 필요' },
+      es: { GOLD: 'Oro', SILVER: 'Plata', BRONZE: 'Bronce', PROVISIONAL: 'Provisional', 'NEEDS WORK': 'Necesita trabajo', FLAGGED: 'Sospechoso' },
+      'pt-BR': { GOLD: 'Ouro', SILVER: 'Prata', BRONZE: 'Bronze', PROVISIONAL: 'Provisória', 'NEEDS WORK': 'Precisa melhorar', FLAGGED: 'Sinalizado' },
     };
     return labels[lang]?.[grade] || grade || '-';
   }
@@ -751,6 +756,11 @@
         luck_unclear: '难以和运气区分',
         not_evaluated: '未评估优势',
       },
+      en: { beat: 'beats hold + random timing', hold_only: 'beats buy & hold; random control unavailable', lost: 'did NOT beat buy & hold', random_fail: 'no edge over random timing', marginal: 'only a marginal edge', luck_unclear: 'hard to tell from luck', not_evaluated: 'not evaluated — add asset K-line' },
+      ja: { beat: '保有とランダムを上回る', hold_only: '買い持ちを上回るがランダム対照不可', lost: '買い持ちに劣後', random_fail: 'ランダムタイミングに優位性なし', marginal: '優位性はわずか', luck_unclear: '運との区別が難しい', not_evaluated: '未評価 - 資産価格を追加' },
+      ko: { beat: '보유와 랜덤 타이밍을 상회', hold_only: '매수 보유 상회, 랜덤 대조 불가', lost: '매수 보유보다 낮음', random_fail: '랜덤 타이밍 대비 우위 없음', marginal: '우위가 약함', luck_unclear: '운과 구분이 어려움', not_evaluated: '미평가 - 자산 가격 추가' },
+      es: { beat: 'supera hold y timing aleatorio', hold_only: 'supera buy & hold; control aleatorio no disponible', lost: 'no supera buy & hold', random_fail: 'sin ventaja vs timing aleatorio', marginal: 'ventaja marginal', luck_unclear: 'difícil separarlo de suerte', not_evaluated: 'no evaluado - agrega precios del activo' },
+      'pt-BR': { beat: 'supera hold e timing aleatório', hold_only: 'supera buy & hold; controle aleatório indisponível', lost: 'não supera buy & hold', random_fail: 'sem vantagem vs timing aleatório', marginal: 'vantagem marginal', luck_unclear: 'difícil separar de sorte', not_evaluated: 'não avaliado - adicione preços do ativo' },
     };
     return labels[lang]?.[edge] || edge || '-';
   }

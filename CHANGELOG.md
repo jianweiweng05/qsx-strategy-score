@@ -2,6 +2,14 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## v0.3.1 — Complete multilingual score delivery
+
+### Fixed
+
+- Japanese, Korean, Spanish, and Brazilian Portuguese now keep their selected language through the Chrome score, scorecard, and PDF flows.
+- Localized grade, edge, artifact, and headline fallbacks in both extension surfaces.
+- Added regression coverage for all supported locales.
+
 ## Chrome 1.2.0 - Share and PDF delivery
 
 ### Added

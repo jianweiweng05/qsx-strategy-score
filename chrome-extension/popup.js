@@ -374,6 +374,26 @@ const ARTIFACT_COPY = {
     sent: 'Sent. Check your inbox.',
     failed: 'That did not work. Please try again.',
   },
+  ja: {
+    title: 'この結果を保存・共有', subtitle: 'スコアカードを共有するか、3ページの無料診断を保存します。',
+    share: 'スコアカードを共有', preparing: '生成中...', png: 'PNG', pdf: '3ページPDF', email: 'PNG + PDFをメール送信',
+    consent: 'QuantScopeXの製品更新も受け取る（任意、いつでも配信停止可）。', sent: '送信しました。受信トレイを確認してください。', failed: '処理に失敗しました。もう一度お試しください。',
+  },
+  ko: {
+    title: '결과 저장 및 공유', subtitle: '스코어카드를 공유하거나 3페이지 무료 진단을 보관하세요.',
+    share: '스코어카드 공유', preparing: '준비 중...', png: 'PNG', pdf: '3페이지 PDF', email: 'PNG + PDF 이메일 보내기',
+    consent: 'QuantScopeX 제품 업데이트도 받기 (선택 사항, 언제든 구독 취소 가능).', sent: '보냈습니다. 받은 편지함을 확인하세요.', failed: '처리하지 못했습니다. 다시 시도하세요.',
+  },
+  es: {
+    title: 'Guardar y compartir este resultado', subtitle: 'Comparte la tarjeta o guarda el diagnóstico gratuito de tres páginas.',
+    share: 'Compartir tarjeta', preparing: 'Preparando...', png: 'PNG', pdf: 'PDF de 3 páginas', email: 'Enviar PNG + PDF',
+    consent: 'Recibir también actualizaciones de QuantScopeX (opcional; puedes cancelar cuando quieras).', sent: 'Enviado. Revisa tu bandeja de entrada.', failed: 'No se pudo completar. Inténtalo de nuevo.',
+  },
+  'pt-BR': {
+    title: 'Salvar e compartilhar este resultado', subtitle: 'Compartilhe o scorecard ou guarde o diagnóstico gratuito de três páginas.',
+    share: 'Compartilhar scorecard', preparing: 'Preparando...', png: 'PNG', pdf: 'PDF de 3 páginas', email: 'Enviar PNG + PDF',
+    consent: 'Receber também atualizações da QuantScopeX (opcional; cancele quando quiser).', sent: 'Enviado. Confira sua caixa de entrada.', failed: 'Não foi possível concluir. Tente novamente.',
+  },
 };
 
 const GRADE_COPY = {
@@ -385,6 +405,11 @@ const GRADE_COPY = {
     'NEEDS WORK': '需改进',
     FLAGGED: '存疑',
   },
+  en: { GOLD: 'Gold', SILVER: 'Silver', BRONZE: 'Bronze', PROVISIONAL: 'Provisional', 'NEEDS WORK': 'Needs work', FLAGGED: 'Flagged' },
+  ja: { GOLD: 'ゴールド', SILVER: 'シルバー', BRONZE: 'ブロンズ', PROVISIONAL: '暫定', 'NEEDS WORK': '要改善', FLAGGED: '要検証' },
+  ko: { GOLD: '골드', SILVER: '실버', BRONZE: '브론즈', PROVISIONAL: '잠정', 'NEEDS WORK': '개선 필요', FLAGGED: '검증 필요' },
+  es: { GOLD: 'Oro', SILVER: 'Plata', BRONZE: 'Bronce', PROVISIONAL: 'Provisional', 'NEEDS WORK': 'Necesita trabajo', FLAGGED: 'Sospechoso' },
+  'pt-BR': { GOLD: 'Ouro', SILVER: 'Prata', BRONZE: 'Bronze', PROVISIONAL: 'Provisória', 'NEEDS WORK': 'Precisa melhorar', FLAGGED: 'Sinalizado' },
 };
 
 const EDGE_COPY = {
@@ -397,6 +422,11 @@ const EDGE_COPY = {
     luck_unclear: '难以和运气区分',
     not_evaluated: '未评估优势',
   },
+  en: { beat: 'beats hold + random timing', hold_only: 'beats buy & hold; random control unavailable', lost: 'did NOT beat buy & hold', random_fail: 'no edge over random timing', marginal: 'only a marginal edge', luck_unclear: 'hard to tell from luck', not_evaluated: 'not evaluated — add asset K-line' },
+  ja: { beat: '保有とランダムを上回る', hold_only: '買い持ちを上回るがランダム対照不可', lost: '買い持ちに劣後', random_fail: 'ランダムタイミングに優位性なし', marginal: '優位性はわずか', luck_unclear: '運との区別が難しい', not_evaluated: '未評価 - 資産価格を追加' },
+  ko: { beat: '보유와 랜덤 타이밍을 상회', hold_only: '매수 보유 상회, 랜덤 대조 불가', lost: '매수 보유보다 낮음', random_fail: '랜덤 타이밍 대비 우위 없음', marginal: '우위가 약함', luck_unclear: '운과 구분이 어려움', not_evaluated: '미평가 - 자산 가격 추가' },
+  es: { beat: 'supera hold y timing aleatorio', hold_only: 'supera buy & hold; control aleatorio no disponible', lost: 'no supera buy & hold', random_fail: 'sin ventaja vs timing aleatorio', marginal: 'ventaja marginal', luck_unclear: 'difícil separarlo de suerte', not_evaluated: 'no evaluado - agrega precios del activo' },
+  'pt-BR': { beat: 'supera hold e timing aleatório', hold_only: 'supera buy & hold; controle aleatório indisponível', lost: 'não supera buy & hold', random_fail: 'sem vantagem vs timing aleatório', marginal: 'vantagem marginal', luck_unclear: 'difícil separar de sorte', not_evaluated: 'não avaliado - adicione preços do ativo' },
 };
 
 const state = {
@@ -456,7 +486,7 @@ function uiCopy(lang = langInput?.value) {
 }
 
 function artifactCopy(lang = langInput?.value) {
-  return ARTIFACT_COPY[lang === 'zh' ? 'zh' : 'en'];
+  return ARTIFACT_COPY[lang] || ARTIFACT_COPY.en;
 }
 
 function localizedGrade(grade, lang = langInput.value) {
@@ -635,7 +665,7 @@ function artifactFormData() {
   if (!state.file) throw new Error('No strategy file selected.');
   const formData = new FormData();
   formData.append('file', state.file);
-  formData.append('lang', langInput.value === 'zh' ? 'zh' : 'en');
+  formData.append('lang', langInput.value);
   formData.append('input_type', 'auto');
   if (assetInput.value) formData.append('asset_key', assetInput.value);
   if (state.benchmarkFile) formData.append('benchmark_file', state.benchmarkFile);
@@ -772,7 +802,7 @@ function normalizeScorePayload(payload, lang) {
     ...report,
     pillars,
     triage: payload.triage,
-    headline_local: lang === 'zh' ? (report.meta?.headline_zh || report.headline) : report.headline,
+    headline_local: report.headline_local || report.meta?.headline_local || (lang === 'zh' ? (report.meta?.headline_zh || report.headline) : report.headline),
     meta: { ...(report.meta || {}), resolved_asset: payload.resolved_asset || null },
   };
 }
