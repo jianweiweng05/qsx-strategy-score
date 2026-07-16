@@ -8,6 +8,7 @@ pandas-only.
 """
 from __future__ import annotations
 
+import re
 import textwrap
 from typing import Optional
 
@@ -47,6 +48,10 @@ def _maybe_cjk_font(plt, *texts) -> None:
     """
     plt.rcParams["axes.unicode_minus"] = False
     plt.rcParams["mathtext.fontset"] = "dejavusans"
+    # Type 3 glyph names can contain raw CJK characters for macOS TTC fonts,
+    # which breaks the PDF backend. Embed TrueType outlines instead.
+    plt.rcParams["pdf.fonttype"] = 42
+    plt.rcParams["ps.fonttype"] = 42
     chars = "".join(str(t) for t in texts if t)
     from matplotlib import font_manager
 
@@ -1078,6 +1083,7 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         from matplotlib.backends.backend_pdf import PdfPages
+        from matplotlib.font_manager import FontProperties
         from matplotlib.patches import FancyBboxPatch
     except ImportError as e:  # pragma: no cover
         raise ImportError("render_free_pdf needs matplotlib: pip install 'qsx-score-free[card]'") from e
@@ -1106,7 +1112,49 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         "none": "免费筛查未发现明确硬伤。", "strategy": "策略", "hold": "买入持有",
         "prob_profit": "盈利概率", "worst": "最差 5% 最大回撤",
     }
-    copy = zh if lang == "zh" else en
+    ja = {
+        "title": "無料戦略診断", "subtitle": "過去バックテストの初期スクリーニング", "score": "QSX スコア",
+        "evidence": "証拠ステータス", "why": "評価の柱", "metrics": "主要指標",
+        "path": "エクイティ推移", "drawdown": "ドローダウン", "mc": "モンテカルロ範囲",
+        "findings": "注意すべき点", "next": "推奨する次のステップ", "boundary": "無料レポートで未検証の項目",
+        "boundary_body": "約定コストとスリッページ、危機・市場環境別の挙動、同種戦略内ランキング、キャパシティ、実運用準備度には、より深いデューデリジェンスが必要です。",
+        "footer": "無料の過去データ診断。投資助言ではありません。quantscopex.com/score",
+        "none": "無料スクリーニングでは明確な重大問題は見つかりませんでした。", "strategy": "戦略",
+        "hold": "買い持ち", "prob_profit": "利益確率", "worst": "最悪 5% の最大ドローダウン",
+    }
+    ko = {
+        "title": "무료 전략 진단", "subtitle": "과거 백테스트 1차 선별", "score": "QSX 점수",
+        "evidence": "증거 상태", "why": "평가 항목", "metrics": "핵심 지표",
+        "path": "에쿼티 경로", "drawdown": "드로다운", "mc": "몬테카를로 범위",
+        "findings": "주의가 필요한 항목", "next": "권장 다음 단계", "boundary": "무료 보고서에서 검증하지 않는 항목",
+        "boundary_body": "체결 비용과 슬리피지, 위기·시장 국면별 성과, 동종 전략 순위, 수용 규모와 실전 배포 준비도는 더 깊은 실사가 필요합니다.",
+        "footer": "무료 과거 데이터 선별이며 투자 조언이 아닙니다. quantscopex.com/score",
+        "none": "무료 선별에서 명확한 중대 결함은 발견되지 않았습니다.", "strategy": "전략",
+        "hold": "매수 후 보유", "prob_profit": "수익 확률", "worst": "최악 5% 최대 드로다운",
+    }
+    es = {
+        "title": "Diagnóstico gratuito de estrategia", "subtitle": "Evaluación inicial del backtest histórico",
+        "score": "Puntuación QSX", "evidence": "Estado de la evidencia", "why": "Pilares de evaluación",
+        "metrics": "Métricas principales", "path": "Trayectoria del capital", "drawdown": "Drawdown",
+        "mc": "Rango Monte Carlo", "findings": "Aspectos que requieren atención",
+        "next": "Siguiente paso recomendado", "boundary": "Lo que no evalúa este informe gratuito",
+        "boundary_body": "Los costes de ejecución y el slippage, el comportamiento en crisis y regímenes, el ranking entre estrategias comparables, la capacidad y la preparación para producción requieren un análisis más profundo.",
+        "footer": "Evaluación histórica gratuita; no es asesoramiento financiero. quantscopex.com/score",
+        "none": "La evaluación gratuita no detectó ningún fallo grave claro.", "strategy": "Estrategia",
+        "hold": "Comprar y mantener", "prob_profit": "Probabilidad de beneficio", "worst": "Peor MaxDD del 5%",
+    }
+    pt = {
+        "title": "Diagnóstico gratuito de estratégia", "subtitle": "Triagem inicial do backtest histórico",
+        "score": "Pontuação QSX", "evidence": "Status da evidência", "why": "Pilares de avaliação",
+        "metrics": "Métricas principais", "path": "Trajetória do patrimônio", "drawdown": "Drawdown",
+        "mc": "Faixa de Monte Carlo", "findings": "Pontos que exigem atenção",
+        "next": "Próximo passo recomendado", "boundary": "O que este relatório gratuito não testa",
+        "boundary_body": "Custos de execução e slippage, comportamento em crises e regimes, ranking entre estratégias comparáveis, capacidade e prontidão para produção exigem uma diligência mais profunda.",
+        "footer": "Triagem histórica gratuita; não é recomendação de investimento. quantscopex.com/score",
+        "none": "A triagem gratuita não encontrou nenhuma falha grave clara.", "strategy": "Estratégia",
+        "hold": "Comprar e manter", "prob_profit": "Probabilidade de lucro", "worst": "Pior MaxDD de 5%",
+    }
+    copy = {"en": en, "zh": zh, "ja": ja, "ko": ko, "es": es, "pt-BR": pt}.get(lang, en)
     r = returns.dropna().astype(float)
     ppy = float(report.meta.get("ppy") or 252.0)
     eq = metrics.equity_curve(r)
@@ -1123,7 +1171,11 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         fig = plt.figure(figsize=(8.27, 11.69), facecolor=_CARD_BG)
         canvas = fig.add_axes([0, 0, 1, 1]); canvas.set_axis_off()
         fig.text(0.065, 0.955, "QUANTSCOPEX", color=_CARD_GREEN, fontsize=9.5, fontweight="bold")
-        fig.text(0.935, 0.955, "免费评分" if lang == "zh" else "FREE SCORE",
+        score_tag = {
+            "zh": "免费评分", "ja": "無料スコア", "ko": "무료 점수",
+            "es": "PUNTUACIÓN GRATIS", "pt-BR": "PONTUAÇÃO GRÁTIS",
+        }.get(lang, "FREE SCORE")
+        fig.text(0.935, 0.955, score_tag,
                  color=_CARD_FAINT, fontsize=8.5, ha="right")
         fig.text(0.065, 0.035, copy["footer"], color=_CARD_FAINT, fontsize=7.8)
         return fig
@@ -1137,11 +1189,50 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         ))
         return ax
 
-    def wrapped(value, width=76, lines=3):
-        return "\n".join(textwrap.wrap(str(value or ""), width=width)[:lines])
+    def wrap_render_text(ax, value, *, max_width=0.9, fontsize=9.0,
+                         fontweight="normal", max_lines=3):
+        """Wrap by measured renderer width, not character count.
 
-    def metric(ax, x, label, value, note="", value_size=16):
-        ax.text(x, 0.73, label, color=_CARD_MUTED, fontsize=8.2, fontweight="bold", va="top")
+        A CJK glyph is substantially wider than an ASCII character, so
+        ``textwrap`` alone lets Chinese copy escape the PDF panel. Tokenize
+        Latin words but keep CJK/punctuation breakable at character boundaries.
+        """
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        renderer = ax.figure.canvas.get_renderer()
+        available = ax.get_window_extent(renderer).width * max_width
+        props = FontProperties(size=fontsize, weight=fontweight)
+
+        def text_width(value):
+            return renderer.get_text_width_height_descent(value, props, ismath=False)[0]
+
+        tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9%+/_.,:;!?()\-]*|\s+|.", text)
+        lines = []
+        current = ""
+        for token in tokens:
+            candidate = current + token
+            if current and text_width(candidate) > available:
+                lines.append(current.rstrip())
+                current = token.lstrip()
+            else:
+                current = candidate
+        if current:
+            lines.append(current.rstrip())
+
+        if len(lines) <= max_lines:
+            return "\n".join(lines)
+        kept = lines[:max_lines]
+        tail = kept[-1]
+        while tail and text_width(tail + "...") > available:
+            tail = tail[:-1]
+        kept[-1] = (tail.rstrip() + "...") if tail else "..."
+        return "\n".join(kept)
+
+    def metric(ax, x, label, value, note="", value_size=16, label_width=0.42):
+        ax.text(x, 0.73, wrap_render_text(ax, label, max_width=label_width,
+                                          fontsize=8.2, fontweight="bold", max_lines=2),
+                color=_CARD_MUTED, fontsize=8.2, fontweight="bold", va="top")
         ax.text(x, 0.42, value, color=_CARD_TEXT, fontsize=value_size, fontweight="bold", va="top")
         if note:
             ax.text(x, 0.15, note, color=_CARD_FAINT, fontsize=7.2, va="top")
@@ -1157,7 +1248,9 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         score_ax.text(0.23, 0.25, "/ 100", color=_CARD_MUTED, fontsize=13)
         score_ax.text(0.38, 0.70, _png_grade(report.grade, lang),
                       color=status_color, fontsize=14, fontweight="bold")
-        score_ax.text(0.38, 0.48, wrapped(_localized_headline(report, lang), 46, 3),
+        score_ax.text(0.38, 0.48, wrap_render_text(
+            score_ax, _localized_headline(report, lang), max_width=0.56,
+            fontsize=11, max_lines=3),
                       color=_CARD_TEXT, fontsize=11, va="top", linespacing=1.45)
         ev_label = t(f"evidence.{evidence.get('status', 'insufficient')}", lang)
         score_ax.text(0.38, 0.13, f"{copy['evidence']}: {ev_label}", color=_CARD_MUTED, fontsize=8.8)
@@ -1185,9 +1278,10 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         end = str(report.meta.get("end") or "")[:10]
         metric(meta_ax, 0.04, _png_label("period", lang), f"{start}  →  {end}", value_size=11)
         sample_unit = report.meta.get("sample_unit", "bars")
+        years_label = {"zh": "年", "ja": "年", "ko": "년", "es": "años", "pt-BR": "anos"}.get(lang, "years")
         metric(meta_ax, 0.55, t("sample", lang),
                f"{report.meta.get('n', len(r))} {t(sample_unit, lang)}",
-               f"{float(report.meta.get('span_years') or 0):.2f} {'年' if lang == 'zh' else 'years'}",
+               f"{float(report.meta.get('span_years') or 0):.2f} {years_label}",
                value_size=12)
         pdf.savefig(fig, facecolor=_CARD_BG); plt.close(fig)
 
@@ -1195,11 +1289,13 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         fig = new_page()
         fig.text(0.065, 0.89, copy["metrics"], color=_CARD_TEXT, fontsize=22, fontweight="bold")
         metrics_ax = panel(fig, [0.065, 0.69, 0.87, 0.14])
-        metric_names = (
-            ["年化收益率", "夏普比率", "索提诺比率", "卡玛比率", "最大回撤", "条件风险价值 5%"]
-            if lang == "zh"
-            else ["CAGR", "Sharpe", "Sortino", "Calmar", "MaxDD", "CVaR 5%"]
-        )
+        metric_names = {
+            "zh": ["年化收益率", "夏普比率", "索提诺比率", "卡玛比率", "最大回撤", "条件风险价值 5%"],
+            "ja": ["年率リターン", "シャープ比", "ソルティノ比", "カルマー比", "最大ドローダウン", "条件付きVaR 5%"],
+            "ko": ["연환산 수익률", "샤프 비율", "소르티노 비율", "칼마 비율", "최대 드로다운", "조건부 VaR 5%"],
+            "es": ["CAGR", "Ratio Sharpe", "Ratio Sortino", "Ratio Calmar", "MaxDD", "CVaR 5%"],
+            "pt-BR": ["CAGR", "Índice Sharpe", "Índice Sortino", "Índice Calmar", "MaxDD", "CVaR 5%"],
+        }.get(lang, ["CAGR", "Sharpe", "Sortino", "Calmar", "MaxDD", "CVaR 5%"])
         values = list(zip(metric_names, [
             f"{metrics.cagr(r, ppy) * 100:.1f}%",
             f"{metrics.sharpe(r, ppy):.2f}",
@@ -1209,7 +1305,7 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
             f"{metrics.cvar(r, 0.05) * 100:.1f}%",
         ]))
         for idx, (label, value) in enumerate(values):
-            metric(metrics_ax, 0.035 + idx * 0.16, label, value)
+            metric(metrics_ax, 0.035 + idx * 0.16, label, value, label_width=0.13)
 
         eq_ax = fig.add_axes([0.10, 0.43, 0.80, 0.20], facecolor=_CARD_PANEL)
         eq_ax.plot(eq.index, eq.values, color=_CARD_GREEN, lw=1.8, label=copy["strategy"])
@@ -1268,27 +1364,46 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
             for idx, issue in enumerate(issues, 1):
                 problem, direction = _localized_issue(issue, lang)
                 findings_ax.text(0.045, y, str(idx), color=_CARD_GREEN, fontsize=12, fontweight="bold", va="top")
-                findings_ax.text(0.10, y, wrapped(problem, 60, 2), color=_CARD_TEXT, fontsize=10.2,
+                problem_text = wrap_render_text(findings_ax, problem, max_width=0.84,
+                                                fontsize=10.2, fontweight="bold", max_lines=2)
+                direction_text = wrap_render_text(findings_ax, direction, max_width=0.84,
+                                                  fontsize=8.2, max_lines=3)
+                findings_ax.text(0.10, y, problem_text, color=_CARD_TEXT, fontsize=10.2,
                                  fontweight="bold", va="top", linespacing=1.35)
-                findings_ax.text(0.10, y - 0.10, wrapped(direction, 76, 2), color=_CARD_MUTED,
+                findings_ax.text(0.10, y - 0.10, direction_text, color=_CARD_MUTED,
                                  fontsize=8.2, va="top", linespacing=1.35)
-                y -= 0.27
+                problem_lines = problem_text.count("\n") + 1
+                direction_lines = direction_text.count("\n") + 1
+                y -= max(0.25, 0.07 * problem_lines + 0.055 * direction_lines + 0.08)
 
         step_ax = panel(fig, [0.065, 0.285, 0.87, 0.17], face="#0c1713", edge="#1d5c46")
         step_ax.text(0.045, 0.75, copy["next"], color=_CARD_GREEN, fontsize=9, fontweight="bold")
-        step_ax.text(0.045, 0.53, wrapped(next_step.get("title") or t("next_step.pro_title", lang), 60, 2),
+        step_ax.text(0.045, 0.53, wrap_render_text(
+            step_ax, next_step.get("title") or t("next_step.pro_title", lang),
+            max_width=0.90, fontsize=12, fontweight="bold", max_lines=2),
                      color=_CARD_TEXT, fontsize=12, fontweight="bold", va="top")
-        step_ax.text(0.045, 0.26, wrapped(next_step.get("body") or t("next_step.pro_body", lang), 86, 2),
+        step_ax.text(0.045, 0.26, wrap_render_text(
+            step_ax, next_step.get("body") or t("next_step.pro_body", lang),
+            max_width=0.90, fontsize=8.5, max_lines=4),
                      color=_CARD_MUTED, fontsize=8.5, va="top")
 
         boundary_ax = panel(fig, [0.065, 0.105, 0.87, 0.12], face=_CARD_PANEL_2)
         boundary_ax.text(0.045, 0.68, copy["boundary"], color=_CARD_MUTED, fontsize=8.5, fontweight="bold")
-        boundary_ax.text(0.045, 0.42, wrapped(copy["boundary_body"], 92, 3),
+        boundary_ax.text(0.045, 0.42, wrap_render_text(
+            boundary_ax, copy["boundary_body"], max_width=0.90,
+            fontsize=8, max_lines=4),
                          color=_CARD_FAINT, fontsize=8, va="top", linespacing=1.35)
         pdf.savefig(fig, facecolor=_CARD_BG); plt.close(fig)
 
         info = pdf.infodict()
-        info["Title"] = "QuantScopeX 免费策略诊断" if lang == "zh" else "QuantScopeX Free Strategy Diagnostic"
+        info["Title"] = {
+            "zh": "QuantScopeX 免费策略诊断", "ja": "QuantScopeX 無料戦略診断",
+            "ko": "QuantScopeX 무료 전략 진단", "es": "Diagnóstico gratuito de estrategia QuantScopeX",
+            "pt-BR": "Diagnóstico gratuito de estratégia QuantScopeX",
+        }.get(lang, "QuantScopeX Free Strategy Diagnostic")
         info["Author"] = "QuantScopeX"
-        info["Subject"] = "历史策略筛查" if lang == "zh" else "Historical strategy screening"
+        info["Subject"] = {
+            "zh": "历史策略筛查", "ja": "過去戦略のスクリーニング", "ko": "과거 전략 선별",
+            "es": "Evaluación histórica de estrategias", "pt-BR": "Triagem histórica de estratégias",
+        }.get(lang, "Historical strategy screening")
     return out_path

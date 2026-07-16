@@ -2,6 +2,15 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## v0.3.2 — PDF layout and multilingual artifact fix
+
+### Fixed
+
+- Free PDF text now wraps by measured font width, so long Chinese headlines and findings stay inside their panels.
+- Findings advance by their rendered line count instead of fixed character assumptions.
+- Japanese and Korean PDF font embedding no longer fails on CJK system fonts.
+- All six supported languages now localize the PDF's fixed headings, metric labels, boundaries, and metadata.
+
 ## v0.3.1 — Complete multilingual score delivery
 
 ### Fixed

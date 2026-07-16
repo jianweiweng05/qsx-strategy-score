@@ -56,6 +56,39 @@ def test_free_pdf_renders_three_pages(tmp_path):
         assert doc.page_count == 3
 
 
+def test_free_pdf_long_chinese_copy_stays_inside_page(tmp_path):
+    fitz = pytest.importorskip("fitz")
+    r, meta = load_returns(ROOT / "examples" / "sample_flagged.csv")
+    report = score_unified(r, "other", meta=meta)
+    triage = build_triage_diagnostics(r, report, meta=meta, lang="zh").to_dict()
+    out = tmp_path / "free-diagnostic-flagged-zh.pdf"
+
+    render_free_pdf(report, r, str(out), lang="zh", triage=triage)
+
+    with fitz.open(out) as doc:
+        assert doc.page_count == 3
+        for page in doc:
+            for x0, y0, x1, y1, *_rest in page.get_text("blocks"):
+                assert x0 >= -1 and y0 >= -1
+                assert x1 <= page.rect.width + 1
+                assert y1 <= page.rect.height + 1
+
+
+@pytest.mark.parametrize("lang", SUPPORTED_LANGS)
+def test_free_pdf_renders_for_each_supported_language(tmp_path, lang):
+    fitz = pytest.importorskip("fitz")
+    r, meta = load_returns(ROOT / "examples" / "sample_returns.csv")
+    report = score_unified(r, "other", meta=meta)
+    triage = build_triage_diagnostics(r, report, meta=meta, lang=lang).to_dict()
+    out = tmp_path / f"free-diagnostic-{lang}.pdf"
+
+    render_free_pdf(report, r, str(out), lang=lang, triage=triage)
+
+    with fitz.open(out) as doc:
+        assert doc.page_count == 3
+        assert out.stat().st_size > 40_000
+
+
 
 def test_unbenchmarked_high_path_score_is_provisional():
     r, meta = load_returns(ROOT / "examples" / "sample_returns.csv")
