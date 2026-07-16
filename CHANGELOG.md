@@ -2,6 +2,12 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## v0.3.3 — CJK punctuation line breaking
+
+### Fixed
+
+- Chinese closing punctuation now stays with the preceding line, so PDF headlines do not begin a line with a comma or full stop.
+
 ## v0.3.2 — PDF layout and multilingual artifact fix
 
 ### Fixed

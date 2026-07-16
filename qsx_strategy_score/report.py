@@ -1208,13 +1208,26 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
             return renderer.get_text_width_height_descent(value, props, ismath=False)[0]
 
         tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9%+/_.,:;!?()\-]*|\s+|.", text)
+        closing_punctuation = set("，。；：！？、）》】}］〕〉》」』”’％,.!?:;)%]")
+        opening_punctuation = set("（《【{［〔〈《「『“‘(")
         lines = []
         current = ""
         for token in tokens:
             candidate = current + token
             if current and text_width(candidate) > available:
-                lines.append(current.rstrip())
-                current = token.lstrip()
+                clean_token = token.strip()
+                if clean_token and clean_token[0] in closing_punctuation:
+                    current = candidate
+                    continue
+                if current[-1] in opening_punctuation:
+                    opener = current[-1]
+                    previous = current[:-1].rstrip()
+                    if previous:
+                        lines.append(previous)
+                    current = opener + token.lstrip()
+                else:
+                    lines.append(current.rstrip())
+                    current = token.lstrip()
             else:
                 current = candidate
         if current:
