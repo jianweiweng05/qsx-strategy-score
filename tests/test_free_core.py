@@ -177,21 +177,15 @@ def test_overlay_client_normalizes_to_daily_minimal_csv():
     assert "symbol" not in normalized.csv
 
 
-def test_overlay_trade_log_expands_holding_period_to_daily_path():
+def test_overlay_trade_log_cannot_invent_daily_path():
     df = pd.DataFrame({
         "entry_time": ["2019-10-26", "2021-01-01", "2024-12-01", "2025-06-01"],
         "exit_time": ["2019-11-19", "2021-04-13", "2025-03-11", "2025-06-22"],
         "pnl_pct": [-4.98, 71.86, 34.79, 2.35],
         "symbol": ["BTC"] * 4,
     })
-    daily = trade_log_to_daily_overlay_returns(io.StringIO(df.to_csv(index=False)), filename="BTC10H.csv")
-    normalized = normalize_daily_returns(daily)
-
-    assert normalized.rows > 1800
-    assert normalized.start == "2019-10-26"
-    assert normalized.end == "2025-06-22"
-    assert "entry_time" not in normalized.csv
-    assert "symbol" not in normalized.csv
+    with pytest.raises(OverlayPreviewError, match="Trade-log Overlay Preview is unavailable"):
+        trade_log_to_daily_overlay_returns(io.StringIO(df.to_csv(index=False)), filename="BTC10H.csv")
 
 
 def test_overlay_trade_log_rejects_overlapping_positions():
@@ -202,11 +196,11 @@ def test_overlay_trade_log_rejects_overlapping_positions():
         "symbol": ["BTC"] * 3,
     })
 
-    with pytest.raises(OverlayPreviewError, match="overlapping positions"):
+    with pytest.raises(OverlayPreviewError, match="Trade-log Overlay Preview is unavailable"):
         trade_log_to_daily_overlay_returns(io.StringIO(df.to_csv(index=False)), filename="BTC_overlap.csv")
 
 
-def test_overlay_trade_log_allows_same_day_handoffs():
+def test_trade_handoffs_are_descriptive_but_cannot_use_overlay():
     df = pd.DataFrame({
         "entry_time": ["2024-01-01", "2024-01-10", "2024-02-01"],
         "exit_time": ["2024-01-10", "2024-01-20", "2024-02-05"],
@@ -214,11 +208,11 @@ def test_overlay_trade_log_allows_same_day_handoffs():
         "symbol": ["BTC"] * 3,
     })
 
-    daily = trade_log_to_daily_overlay_returns(io.StringIO(df.to_csv(index=False)), filename="BTC_handoff.csv")
-
-    assert daily.index[0] == pd.Timestamp("2024-01-01")
-    assert daily.index[-1] == pd.Timestamp("2024-02-05")
-    assert len(daily) == 36
+    r, meta = load_returns(io.StringIO(df.to_csv(index=False)))
+    assert len(r) == 3  # handoff is valid for descriptive statistics
+    assert meta["account_metrics_available"] is False
+    with pytest.raises(OverlayPreviewError, match="unavailable"):
+        trade_log_to_daily_overlay_returns(io.StringIO(df.to_csv(index=False)), filename="BTC_handoff.csv")
 
 
 def test_overlay_trade_log_rejects_intraday_overlap():
@@ -229,7 +223,7 @@ def test_overlay_trade_log_rejects_intraday_overlap():
         "symbol": ["BTC"] * 3,
     })
 
-    with pytest.raises(OverlayPreviewError, match="overlapping positions"):
+    with pytest.raises(OverlayPreviewError, match="Trade-log Overlay Preview is unavailable"):
         trade_log_to_daily_overlay_returns(io.StringIO(df.to_csv(index=False)), filename="BTC_intraday_overlap.csv")
 
 
@@ -262,8 +256,8 @@ def test_loader_accepts_raw_tradingview_multisheet_xlsx(tmp_path):
 
     returns, meta = load_returns(path)
     report = score_unified(returns, "crypto", meta=meta)
-    daily = trade_log_to_daily_overlay_returns(path, filename=str(path))
-    normalized = normalize_daily_returns(daily)
+    with pytest.raises(OverlayPreviewError, match="unavailable"):
+        trade_log_to_daily_overlay_returns(path, filename=str(path))
 
     assert meta["input_type"] == "trade_log"
     assert list(returns.round(6)) == [0.10, 0.05, -0.03, 0.08]
@@ -271,10 +265,8 @@ def test_loader_accepts_raw_tradingview_multisheet_xlsx(tmp_path):
     assert len(meta["trade_entry_times"]) == 4
     assert str(meta["trade_entry_times"][0]).startswith("2020-01-01")
     assert any("TradingView-style event log" in w for w in meta["warnings"])
-    assert report.display >= 0
-    assert len(daily) >= 100
-    assert normalized.start == "2020-01-01"
-    assert normalized.end == "2020-04-18"
+    assert report.display is None
+    assert report.meta["trade_summary"]["n_trades"] == 4
 
 
 def test_loader_accepts_rare_extreme_positive_daily_return():
@@ -350,7 +342,9 @@ def test_overlay_preview_sends_github_source_header(monkeypatch):
     out = run_overlay_preview(r, lang="zh")
 
     headers = captured["request"].headers
-    assert headers["X-qsx-client"] == "qsx-score-free/0.1.0"
+    from qsx_strategy_score import __version__
+    assert headers["X-qsx-client"] == f"qsx-score-free/{__version__}"
+    assert headers["X-qsx-core-version"] == __version__
     assert headers["X-qsx-source"] == "github-open-source"
     assert headers["X-qsx-lang"] == "zh"
     assert out["_local"]["normalized_rows"] == 40
@@ -494,7 +488,7 @@ def test_chrome_release_metadata_and_share_copy_cover_all_locales():
     popup_html = (ROOT / "chrome-extension" / "popup.html").read_text()
     popup = (ROOT / "chrome-extension" / "popup.js").read_text()
 
-    assert manifest["version"] == "1.3.2"
+    assert manifest["version"] == "1.4.0"
     assert 'id="app-version"' in popup_html
     assert '>v1.3.2</span>' in popup_html
     assert "const SHARE_COPY = {" in popup
@@ -639,7 +633,7 @@ def test_unified_score_handles_marginal_edge_without_random_p():
     assert report.display >= 0
 
 
-def test_closed_trade_log_random_control_uses_event_windows():
+def test_closed_trade_log_cannot_use_event_or_bar_random_control():
     n = 46
     entries = pd.date_range("2019-11-18", periods=n, freq="45D")
     exits = entries + pd.Timedelta(days=20)
@@ -663,10 +657,10 @@ def test_closed_trade_log_random_control_uses_event_windows():
     report = score_unified(r, "crypto", meta=meta, benchmark=bench, random_sims=96)
 
     assert len(meta["trade_entry_times"]) == n
-    assert report.meta["random_control_method"] == "event_window"
-    assert report.meta["random_control_events"] == n
-    assert report.meta["random_p"] is not None
-    assert report.lights["edge"] != "hold_only"
+    assert report.meta["random_p"] is None
+    assert report.display is None
+    assert report.tier is None
+    assert report.meta["evidence"]["reason_codes"] == ["ACCOUNT_PATH_REQUIRED"]
 
 
 def test_closed_trade_log_partial_benchmark_overlap_does_not_crash():
@@ -686,13 +680,12 @@ def test_closed_trade_log_partial_benchmark_overlap_does_not_crash():
 
     report = score_unified(r, "crypto", meta=meta, benchmark=bench, random_sims=64)
 
-    assert bench is not None
-    assert bench["partial"] is True
-    assert report.display >= 0
-    assert report.meta["random_control_method"] in {"event_window", None}
+    assert bench is None
+    assert report.display is None
+    assert report.meta["descriptive_only"] is True
 
 
-def test_forward_looking_filename_caps_score(tmp_path):
+def test_forward_looking_filename_does_not_change_score(tmp_path):
     path = tmp_path / "BTC_leaky_future_ma.csv"
     df = pd.DataFrame({
         "date": pd.date_range("2020-01-01", periods=400, freq="D"),
@@ -704,10 +697,11 @@ def test_forward_looking_filename_caps_score(tmp_path):
     report = score_unified(r, "crypto", meta=meta)
 
     assert any("forward-looking" in w for w in meta["warnings"])
-    assert any(f["code"] == "FORWARD_LOOKING_INPUT" for f in report.flags)
-    assert report.grade in {"NEEDS WORK", "FLAGGED"}
-    assert report.judgement in {"CAUTION", "FLAGGED"}
-    assert report.display <= 59.0
+    plain_r, plain_meta = load_returns(io.StringIO(df.to_csv(index=False)), filename="BTC.csv")
+    plain = score_unified(plain_r, "crypto", meta=plain_meta)
+    assert not any(f["code"] == "FORWARD_LOOKING_INPUT" for f in report.flags)
+    assert report.display == plain.display
+    assert report.grade == plain.grade
 
 
 def test_unified_png_scorecard_renders_wide_card(tmp_path):

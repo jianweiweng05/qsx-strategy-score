@@ -21,6 +21,8 @@ from typing import Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from .metrics import account_return_grid_reason
+
 SECONDS_PER_YEAR = 365.25 * 86400.0
 
 _DATE_HINTS = ("datetime", "date", "timestamp", "time", "dt", "bar")
@@ -384,14 +386,46 @@ def _parse_dates(s: pd.Series) -> pd.Series:
     if num.notna().mean() > 0.8 and num.notna().any():     # looks numeric -> likely epoch
         med = float(num.dropna().abs().median())
         if 20_000 <= med < 80_000:
-            return pd.to_datetime(num, unit="D", origin="1899-12-30", errors="coerce")
+            return pd.to_datetime(num, unit="D", origin="1899-12-30", errors="coerce", utc=True).dt.tz_localize(None)
         unit = ("s" if 1e8 <= med < 1e11 else
                 "ms" if 1e11 <= med < 1e14 else
                 "us" if 1e14 <= med < 1e17 else
                 "ns" if 1e17 <= med < 1e20 else None)
         if unit:
-            return pd.to_datetime(num, unit=unit, errors="coerce")
-    return pd.to_datetime(s, errors="coerce", utc=False)
+            return pd.to_datetime(num, unit=unit, errors="coerce", utc=True).dt.tz_localize(None)
+    parsed = pd.to_datetime(s, errors="coerce", utc=True)
+    # pandas 2 uses one inferred format. Retry only mixed-format values, while
+    # keeping truly unparseable timestamps invalid for the loader to reject.
+    missing = parsed.isna() & s.notna()
+    if missing.any():
+        retried = s.loc[missing].map(lambda v: pd.to_datetime(v, errors="coerce", utc=True))
+        # An all-NaT retry can infer a timezone-naive dtype (pandas 3 rejects
+        # assigning that into UTC). Keep the original timezone and resolution.
+        parsed.loc[missing] = pd.to_datetime(retried, errors="coerce", utc=True).astype(parsed.dtype)
+    return pd.to_datetime(parsed, errors="coerce", utc=True).dt.tz_localize(None)
+
+
+def _checked_period_rows(dt: pd.Series, values: pd.Series) -> tuple[pd.DataFrame, int]:
+    """One value per period endpoint; never select a conflicting row by order."""
+    work = pd.DataFrame({"dt": dt, "v": values})
+    if work["dt"].isna().any():
+        raise InputError("unparseable or missing timestamp; correct the source dates before scoring.")
+    if not np.isfinite(work["v"].to_numpy(dtype=float)).all():
+        raise InputError("missing, unparseable or non-finite value; no return/price rows were discarded.")
+    if (work.groupby("dt")["v"].nunique() > 1).any():
+        raise InputError("conflicting values at a duplicate timestamp; supply one value per period endpoint.")
+    clean = work.drop_duplicates(subset="dt").sort_values("dt")
+    return clean, len(work) - len(clean)
+
+
+def _reject_overlapping_trades(work: pd.DataFrame) -> None:
+    """Intervals are [entry, exit): an exit and next entry may share a time."""
+    ordered = work.sort_values(["entry_dt", "dt"])
+    latest_end = None
+    for start, end in ordered[["entry_dt", "dt"]].itertuples(index=False, name=None):
+        if latest_end is not None and start < latest_end:
+            raise InputError("overlapping positions are not supported; upload aggregate account returns or an equity curve.")
+        latest_end = end if latest_end is None else max(latest_end, end)
 
 
 def _pick_date_column(df: pd.DataFrame, date_column: Optional[str]) -> str:
@@ -643,7 +677,11 @@ def _load_trade_log(df: pd.DataFrame, tl: dict, warnings: list):
                 entry_rows = df.loc[entry_mask].copy()
                 if len(entry_rows):
                     entry_rows["_entry_dt"] = _parse_dates(entry_rows[tl["exit"]])
-                    entry_rows = entry_rows.dropna(subset=["_entry_dt"]).sort_values("_entry_dt")
+                    if entry_rows["_entry_dt"].isna().any():
+                        raise InputError("every trade needs valid entry and exit timestamps.")
+                    if entry_rows[trade_col].isna().any() or entry_rows[trade_col].duplicated().any():
+                        raise InputError("ambiguous TradingView entry identifiers; partial or pyramided entries are unsupported.")
+                    entry_rows = entry_rows.sort_values("_entry_dt")
                     if len(entry_rows):
                         tv_entry_by_trade = (
                             entry_rows.groupby(trade_col)["_entry_dt"].first().to_dict()
@@ -660,14 +698,20 @@ def _load_trade_log(df: pd.DataFrame, tl: dict, warnings: list):
     if entry_dt is None and tv_entry_by_trade and trade_col is not None and trade_col in source_df.columns:
         mapped = source_df[trade_col].map(tv_entry_by_trade)
         parsed = _parse_dates(mapped)
-        if parsed.notna().mean() >= 0.7:
-            entry_dt = parsed
+        entry_dt = parsed
     pnl, parsed_as_pct = _coerce_numeric(source_df[tl["pnl"]])
     work_data = {"dt": dt, "v": pnl}
     if entry_dt is not None:
         work_data["entry_dt"] = entry_dt
-    work = pd.DataFrame(work_data).dropna(subset=["dt", "v"]).sort_values("dt")
-    n_dropped = len(source_df) - len(work)
+    work = pd.DataFrame(work_data).sort_values("dt")
+    if entry_dt is None or work[["entry_dt", "dt"]].isna().any().any():
+        raise InputError("every trade needs valid entry and exit timestamps; upload account returns/NAV if these are unavailable.")
+    if (work["entry_dt"] > work["dt"]).any():
+        raise InputError("trade entry is after exit; correct the source timestamps.")
+    if not np.isfinite(work["v"].to_numpy(dtype=float)).all():
+        raise InputError("trade returns contain missing or non-finite values; no trades were discarded.")
+    _reject_overlapping_trades(work)
+    n_dropped = 0
     if len(work) < 3:
         raise InputError("fewer than 3 valid trades after cleaning.")
     rets = work["v"].to_numpy(dtype=float)
@@ -677,8 +721,8 @@ def _load_trade_log(df: pd.DataFrame, tl: dict, warnings: list):
     if tl["is_pct"] and not parsed_as_pct:
         rets = rets / 100.0
     if tl["is_pct"] or parsed_as_pct:
-        warnings.append(f"trade log: '{tl['pnl']}' read as percent (÷100); per-trade equity "
-                        f"compounds fully-reinvested{guess_note}")
+        warnings.append(f"trade log: '{tl['pnl']}' read as percent (÷100); "
+                        f"descriptive trade statistics only{guess_note}")
     else:
         warnings.append(f"trade log: '{tl['pnl']}' read as decimal per-trade returns{guess_note}")
     if tl.get("unit_ambiguous"):
@@ -687,30 +731,27 @@ def _load_trade_log(df: pd.DataFrame, tl: dict, warnings: list):
                         "returns; rename the column to pnl_pct to force percent")
     bad = rets <= -1.0
     if bad.any():
-        rets = np.where(bad, -0.999, rets)
-        warnings.append(f"clipped {int(bad.sum())} trade(s) with return <= -100% to -99.9%")
+        raise InputError("trade return <= -100% is unsupported by this parser; the loss has not been clipped or removed.")
     returns = pd.Series(rets, index=pd.DatetimeIndex(work["dt"].to_numpy()), name=str(tl["pnl"]))
-    _equity_sanity(returns)
     idx = returns.index
-    span_years = (idx[-1] - idx[0]).total_seconds() / SECONDS_PER_YEAR
+    span_years = (idx[-1] - work["entry_dt"].min()).total_seconds() / SECONDS_PER_YEAR
     n = len(returns)
     ppy = n / span_years if span_years > 0 else 252.0
     sym_col = _match(list(df.columns), ("symbol", "ticker", "asset", "pair", "instrument"))
     symbol = None
     if sym_col is not None:
-        sv = df[sym_col].dropna()
-        symbol = str(sv.iloc[0]) if len(sv) else None
-    valid_event_times = None
-    if "entry_dt" in work.columns:
-        event_times = work[["entry_dt", "dt"]].dropna().copy()
-        event_times = event_times[event_times["entry_dt"] <= event_times["dt"]]
-        if len(event_times) >= max(3, int(0.7 * n)):
-            valid_event_times = event_times
+        sv = source_df[sym_col].dropna().astype(str).str.strip().str.upper()
+        symbols = sv[sv != ""].unique()
+        if len(symbols) > 1:
+            raise InputError("multi-symbol trade logs are unsupported; upload aggregate account returns or an equity curve.")
+        symbol = str(symbols[0]) if len(symbols) else None
+    valid_event_times = work[["entry_dt", "dt"]]
     meta = dict(
         input_type="trade_log", caliber="closed_trade",
         value_column=str(tl["pnl"]), date_column=str(tl["exit"]), symbol=symbol,
         n=n, n_trades=n, span_years=float(span_years), ppy=float(ppy),
-        bar_freq="per-trade", start=str(idx[0]), end=str(idx[-1]),
+        bar_freq="per-trade", start=str(work["entry_dt"].min()), end=str(idx[-1]),
+        account_metrics_available=False, time_zone="UTC",
         n_dropped=int(n_dropped), n_ignored_event_rows=int(n_ignored_event_rows),
         warnings=warnings,
     )
@@ -723,6 +764,7 @@ def _load_trade_log(df: pd.DataFrame, tl: dict, warnings: list):
         )
         meta["trade_holding_days_median"] = float(holding_days.median())
         meta["trade_holding_days_mean"] = float(holding_days.mean())
+    returns.attrs.update(input_type="trade_log", caliber="closed_trade")
     return returns, meta
 
 
@@ -768,13 +810,11 @@ def load_returns(
     vals, vals_were_pct = _coerce_numeric(df[val_col])
     if vals_were_pct:
         warnings.append(f"column '{val_col}' had '%' signs — parsed as percent (÷100)")
-    work = pd.DataFrame({"dt": dt, "v": vals}).dropna()
-    n_dropped = len(df) - len(work)
+    work, n_dropped = _checked_period_rows(dt, vals)
     if n_dropped:
-        warnings.append(f"dropped {n_dropped} row(s) with unparseable date/value")
+        warnings.append(f"removed {n_dropped} identical duplicate timestamp row(s)")
     if len(work) < 3:
         raise InputError("fewer than 3 valid rows after cleaning.")
-    work = work.drop_duplicates(subset="dt", keep="last").sort_values("dt")
     s = pd.Series(work["v"].to_numpy(), index=pd.DatetimeIndex(work["dt"]), name=val_col)
 
     # decide returns vs equity
@@ -794,13 +834,14 @@ def load_returns(
         if (s <= 0).any():
             raise InputError("equity series must be strictly positive.")
         returns = s.pct_change().dropna()
+        returns.attrs["initial_time"] = s.index[0]
     else:
         returns = s.astype(float)
         if (returns <= -1.0).any():
             raise InputError(
                 "returns contain a period <= -100%, which makes equity zero or negative. "
-                "Upload a valid equity curve, fix the return units, or clip/clean busted rows "
-                "before scoring.")
+                "This scorer does not support bankruptcy/negative equity paths. "
+                "Verify units; do not clip or remove a genuine loss.")
         extreme_pos = returns > 3.0
         big_abs_share = float((returns.abs() > 1.0).mean())
         median_abs = float(returns.abs().median()) if len(returns) else 0.0
@@ -821,14 +862,15 @@ def load_returns(
                 "Verify this is not a percent-vs-decimal unit error."
             )
 
-    returns = returns[np.isfinite(returns.to_numpy())]
     if len(returns) < 3:
         raise InputError("fewer than 3 usable returns after processing.")
+    if account_return_grid_reason(returns, input_type=input_type):
+        raise InputError("INCOMPLETE_INTRADAY_RETURNS: intraday returns must use a complete regular UTC grid; mixed or missing intervals cannot establish an account path. Upload actual NAV observations if returns are unavailable.")
     _equity_sanity(returns)
 
     # ppy from data ONLY
     idx = returns.index
-    span_sec = (idx[-1] - idx[0]).total_seconds()
+    span_sec = (idx[-1] - returns.attrs.get("initial_time", idx[0])).total_seconds()
     span_years = span_sec / SECONDS_PER_YEAR
     n = len(returns)
     if span_years > 0:
@@ -851,8 +893,14 @@ def load_returns(
         start=str(idx[0]),
         end=str(idx[-1]),
         n_dropped=int(n_dropped),
+        time_zone="UTC", account_metrics_available=True,
+        input_warning_codes=[
+            "SUSPICIOUS_SOURCE_NAME" if "filename/path" in w else "SUSPICIOUS_COLUMN_NAME"
+            for w in warnings if w.startswith("possible forward-looking")
+        ],
         warnings=warnings,
     )
+    returns.attrs.update(input_type=input_type, caliber="account_returns")
     return returns, meta
 
 
@@ -878,8 +926,9 @@ def load_prices(source, *, column: Optional[str] = None,
             price_col = nums[-1]
     dt = _parse_dates(df[date_col])
     px, _ = _coerce_numeric(df[price_col])
-    work = pd.DataFrame({"dt": dt, "p": px}).dropna()
-    work = work[work["p"] > 0].drop_duplicates(subset="dt", keep="last").sort_values("dt")
+    work, _ = _checked_period_rows(dt, px)
+    if (work["v"] <= 0).any():
+        raise InputError("benchmark prices must be finite and strictly positive.")
     if len(work) < 2:
         raise InputError("fewer than 2 valid price rows in the asset CSV.")
-    return pd.Series(work["p"].to_numpy(), index=pd.DatetimeIndex(work["dt"]), name=str(price_col))
+    return pd.Series(work["v"].to_numpy(), index=pd.DatetimeIndex(work["dt"]), name=str(price_col))

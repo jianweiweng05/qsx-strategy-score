@@ -2,6 +2,26 @@
 
 All notable user-visible changes are recorded here. Before `v1.0`, scoring-policy changes may alter the displayed grade for the same input.
 
+## v0.4.0 — Account-path boundaries and matched daily comparisons
+
+### Changed
+
+- Closed-trade logs now return descriptive trade statistics only. `overall`, `display`, all quality pillars and path risk are `null`; no account CAGR, MTM drawdown, Monte Carlo, timing qualification or metal tier is inferred. Trade-log PNG/PDF exports show the same N/A boundary (one descriptive PDF page).
+- Reject overlapping or multi-symbol logs, missing/reversed trade times, conflicting duplicate timestamps, non-finite observations, and returns at or below -100%. Exact duplicate period rows may be removed with an accurate count. No clipping of genuine losses or silently discarded invalid observations.
+- Benchmark comparisons use common observed daily NAV endpoints in UTC before calculating returns. Mixed or incomplete intraday returns are rejected before account scoring, with or without a benchmark. Incompatible day cutoffs make the comparison unavailable. The benchmark, dependency read and random proxy use the same paired intervals.
+- The random timing proxy preserves beta direction, requires both a daily same-beta static reference and, for intraday data, a matching native-frequency static reference, includes the first interval, and adds no asymmetric default transaction cost. It supports `0.15 <= abs(beta) < 1` only; unsupported, saturated, insolvent or degenerate references return N/A and cannot qualify for a metal tier. Finite-simulation tails use `(exceedances + 1) / (simulations + 1)`.
+- Missing random evidence and insufficient samples no longer impose a score cap. Passing daily proxies is explicitly not a certification of timing skill. Other observed failures still apply. Filename/column-name hints cannot trigger a leakage penalty; a caller-confirmed `known_lookahead=True` can.
+- Rename the displayed composite risk to **path risk (excludes search)**. Add JSON `path_risk`; retain `overfit_risk` as a deprecated equal-valued alias. Search trials default to unknown (`null`), with `search_trials_status` and a short DSR approximation note. An explicit count of 1 remains distinct from unknown.
+- Disable trade-log Overlay Preview at both the UI and conversion entry point. Require an actual account return/NAV path.
+- Cap Monte Carlo array sizes before allocation. Oversized requests return N/A with a reason; historical resampling profit share is not labelled a future probability.
+
+### Reproducibility and migration
+
+- Package/build/CLI core identity now share `_version.py` (`0.4.0`). Reports include the frozen rule ID, random seed, normalized input hash and benchmark snapshot hash. The Overlay request also reports the actual core version.
+- Consumers must accept nullable scores and display N/A rather than converting null to zero. Do not reconstruct account metrics or equity from `closed_trade` returns downstream. Default omitted search counts to unknown.
+- Chrome 1.4.0 source adapts nullable scores, path-risk labels and unknown search counts. Hosted service and site adapters are released separately from this package.
+- The A–G synthetic regression families are required passing tests, not xfails. `VALIDATED` remains `False`; the planned 30 known cases and 50 independent blind strategies have not been evaluated. See [calibration policy](docs/calibration.md).
+
 ## Chrome 1.3.2 - Localized sample units
 
 ### Fixed

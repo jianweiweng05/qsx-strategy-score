@@ -14,7 +14,7 @@ from typing import Optional
 
 import pandas as pd
 
-from .i18n import has_message, localize_cap_reason, t
+from .i18n import has_message, localize_cap_reason, t, unavailable_reason
 from .metrics import equity_curve
 from .scoring import overfit_risk_score
 
@@ -40,7 +40,7 @@ def _bar(v: float, width: int = 10) -> str:
 # --------------------------------------------------------------------------- #
 # PNG card
 # --------------------------------------------------------------------------- #
-def _maybe_cjk_font(plt, *texts) -> None:
+def _maybe_cjk_font(plt, *texts, pdf: bool = False) -> None:
     """Choose a script-aware font for the current card render.
 
     Matplotlib rcParams are process-global, so a previous CJK render can leak its
@@ -48,8 +48,8 @@ def _maybe_cjk_font(plt, *texts) -> None:
     """
     plt.rcParams["axes.unicode_minus"] = False
     plt.rcParams["mathtext.fontset"] = "dejavusans"
-    # Type 3 glyph names can contain raw CJK characters for macOS TTC fonts,
-    # which breaks the PDF backend. Embed TrueType outlines instead.
+    # Prefer TrueType for PDF; some macOS CFF collections advertise .ttc but
+    # cannot be embedded as Type 42. Extraction alone does not catch blank glyphs.
     plt.rcParams["pdf.fonttype"] = 42
     plt.rcParams["ps.fonttype"] = 42
     chars = "".join(str(t) for t in texts if t)
@@ -58,7 +58,7 @@ def _maybe_cjk_font(plt, *texts) -> None:
     def _set_first_available(candidates) -> None:
         for name in candidates:
             try:
-                font_manager.findfont(name, fallback_to_default=False)
+                path = font_manager.findfont(name, fallback_to_default=False)
             except Exception:  # noqa: BLE001
                 continue
             plt.rcParams["font.family"] = "sans-serif"
@@ -70,6 +70,11 @@ def _maybe_cjk_font(plt, *texts) -> None:
                 "Helvetica",
                 "Liberation Sans",
             ]))
+            if pdf:
+                from fontTools.ttLib import TTFont
+                with TTFont(path, fontNumber=0) as font:
+                    if "CFF " in font or "CFF2" in font:
+                        plt.rcParams["pdf.fonttype"] = 3
             return
         plt.rcParams["font.family"] = "sans-serif"
         plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Helvetica", "Liberation Sans"]
@@ -103,6 +108,8 @@ def _maybe_cjk_font(plt, *texts) -> None:
             "Noto Sans CJK SC", "Noto Sans CJK JP", "Noto Sans CJK TC",
             "Microsoft YaHei", "SimHei",
         )
+    if pdf:
+        candidates = ("Arial Unicode MS",) + candidates
     _set_first_available(candidates)
 
 
@@ -331,7 +338,7 @@ def _png_card_headline(report, lang: str = "en") -> str:
     if not report.meta.get("sample_ok", True):
         return "Sample is thin. Treat this score as provisional."
     if edge == "beat":
-        return "Beat buy & hold and random timing in this sample."
+        return "Passed daily proxy comparisons; timing is not certified."
     if edge == "hold_only":
         return "Beat buy & hold. Random timing control not available."
     if edge == "lost":
@@ -625,6 +632,8 @@ def _localized_issue(it: dict, lang: str) -> tuple[str, str]:
 
 
 def _localized_headline(report, lang: str) -> str:
+    if report.meta.get("descriptive_only"):
+        return t("account_path_required", lang)
     if lang == "zh":
         return report.meta.get("headline_zh") or report.headline
     if lang == "en":
@@ -649,7 +658,42 @@ def _localized_headline(report, lang: str) -> str:
     return t("headline.edge_unknown", lang)
 
 
+def method_note(report, lang="en") -> str:
+    trials = report.meta.get("n_trials")
+    dsr = report.meta.get("dsr")
+    return t("search_method", lang, trials=trials if trials is not None else t("search_unknown", lang),
+             dsr=f"{dsr:.1%}" if dsr is not None else "N/A")
+
+
+def descriptive_lines(report, lang="en") -> list:
+    x = report.meta["trade_summary"]
+    return [t("trade_only_title", lang), t("account_path_required", lang),
+            t("trade_count_win", lang, n=x["n_trades"], win=x["win_rate"]),
+            t("trade_return_stats", lang, mean=x["mean_return"], median=x["median_return"],
+              best=x["best_return"], worst=x["worst_return"])]
+
+
+def _render_descriptive_artifact(report, out_path, lang):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    lines = descriptive_lines(report, lang)
+    _maybe_cjk_font(plt, *lines, pdf=str(out_path).lower().endswith(".pdf"))
+    fig = plt.figure(figsize=(16, 9), facecolor="#101c24")
+    y = 0.84
+    for i, line in enumerate(lines):
+        wrapped = "\n".join(textwrap.wrap(line, width=55 if lang in {"zh", "ja", "ko"} else 95))
+        fig.text(0.07, y, wrapped, color="#eef4f6", fontsize=23 if i == 0 else 16, va="top")
+        y -= 0.13 + 0.06 * wrapped.count("\n")
+    fig.text(0.07, 0.06, "QSX Strategy Score · " + report.meta["core_version"], color="#90a6b5", fontsize=12)
+    fig.savefig(out_path, dpi=100, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return out_path
+
+
 def render_unified_text(report, *, lang: str = "en", triage: Optional[dict] = None) -> str:
+    if report.meta.get("descriptive_only"):
+        return "QSX Strategy Score · N/A\n" + "\n".join(descriptive_lines(report, lang))
     from .coaching import coaching as _coaching
     co = _coaching(report)
     emoji, _c, _w = _unified_status(report)
@@ -714,6 +758,10 @@ def render_unified_text(report, *, lang: str = "en", triage: Optional[dict] = No
         L.append("  " + ((triage.get("pro_unlock_map") or {}).get("headline") or t("pro_unlocks_short", lang)))
     L.append("-" * 64)
     L.append("  " + (t("free_triage", lang) if lang != "en" else DISCLAIMER.replace("\n", "\n  ")))
+    L.append("  " + method_note(report, lang))
+    if report.meta.get("random_control_unavailable_reason"):
+        L.append("  " + t("random_na", lang) + " — " + unavailable_reason(report.meta["random_control_unavailable_reason"], lang))
+    L.append("  " + t("proxy_scope", lang))
     L.append("=" * 64)
     return "\n".join(L)
 
@@ -723,6 +771,8 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                        cta: Optional[str] = None,
                        bench: Optional[dict] = None, lang: str = "en",
                        triage: Optional[dict] = None) -> str:
+    if report.meta.get("descriptive_only"):
+        return _render_descriptive_artifact(report, out_path, lang)
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -816,7 +866,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "RANDOM_CONTROL_WEAK_EDGE": "Only weak edge vs random timing.",
                 "RANDOM_CONTROL_UNAVAILABLE": "Random control unavailable.",
                 "EDGE_HARD_TO_DISTINGUISH_FROM_LUCK": "Hard to separate skill from luck.",
-                "DSR_FAIL": "Selection luck can explain this Sharpe.",
+                "DSR_FAIL": "Approximate DSR below 50%.",
                 "DSR_OVERFIT_RISK": "Sharpe weak after search penalty.",
                 "SHORT_TRACK_RECORD": "Track record is under 2 years.",
                 "LOW_EFFECTIVE_SAMPLE": "Profit is concentrated.",
@@ -835,7 +885,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "RANDOM_CONTROL_WEAK_EDGE": "相对随机择时优势弱。",
                 "RANDOM_CONTROL_UNAVAILABLE": "随机对照未运行。",
                 "EDGE_HARD_TO_DISTINGUISH_FROM_LUCK": "难以区分实力和运气。",
-                "DSR_FAIL": "Sharpe 可能来自筛选运气。",
+                "DSR_FAIL": "近似 DSR 低于 50%。",
                 "DSR_OVERFIT_RISK": "搜索惩罚后 Sharpe 偏弱。",
                 "SHORT_TRACK_RECORD": "记录不足两年。",
                 "LOW_EFFECTIVE_SAMPLE": "利润过于集中。",
@@ -854,7 +904,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "RANDOM_CONTROL_WEAK_EDGE": "ランダム比の優位性が弱い。",
                 "RANDOM_CONTROL_UNAVAILABLE": "ランダム対照なし。",
                 "EDGE_HARD_TO_DISTINGUISH_FROM_LUCK": "運との区別が難しい。",
-                "DSR_FAIL": "選択運で説明可能。",
+                "DSR_FAIL": "近似DSRが50%未満。",
                 "DSR_OVERFIT_RISK": "補正後Sharpeが弱い。",
                 "SHORT_TRACK_RECORD": "2年未満の実績。",
                 "LOW_EFFECTIVE_SAMPLE": "利益が集中。",
@@ -873,7 +923,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "RANDOM_CONTROL_WEAK_EDGE": "랜덤 대비 우위 약함.",
                 "RANDOM_CONTROL_UNAVAILABLE": "랜덤 대조 불가.",
                 "EDGE_HARD_TO_DISTINGUISH_FROM_LUCK": "운과 구분 어려움.",
-                "DSR_FAIL": "선택 운으로 설명 가능.",
+                "DSR_FAIL": "근사 DSR 50% 미만.",
                 "DSR_OVERFIT_RISK": "보정 후 Sharpe 약함.",
                 "SHORT_TRACK_RECORD": "2년 미만 기록.",
                 "LOW_EFFECTIVE_SAMPLE": "수익 집중.",
@@ -892,7 +942,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "RANDOM_CONTROL_WEAK_EDGE": "Edge débil vs aleatorio.",
                 "RANDOM_CONTROL_UNAVAILABLE": "Control aleatorio no disponible.",
                 "EDGE_HARD_TO_DISTINGUISH_FROM_LUCK": "Difícil separar de suerte.",
-                "DSR_FAIL": "Sharpe explicable por selección.",
+                "DSR_FAIL": "DSR aproximado inferior al 50%.",
                 "DSR_OVERFIT_RISK": "Sharpe débil tras penalización.",
                 "SHORT_TRACK_RECORD": "Menos de 2 años.",
                 "LOW_EFFECTIVE_SAMPLE": "Beneficio concentrado.",
@@ -911,7 +961,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                 "RANDOM_CONTROL_WEAK_EDGE": "Edge fraco vs aleatório.",
                 "RANDOM_CONTROL_UNAVAILABLE": "Controle aleatório indisponível.",
                 "EDGE_HARD_TO_DISTINGUISH_FROM_LUCK": "Difícil separar de sorte.",
-                "DSR_FAIL": "Sharpe explicado por seleção.",
+                "DSR_FAIL": "DSR aproximado abaixo de 50%.",
                 "DSR_OVERFIT_RISK": "Sharpe fraco após penalidade.",
                 "SHORT_TRACK_RECORD": "Menos de 2 anos.",
                 "LOW_EFFECTIVE_SAMPLE": "Lucro concentrado.",
@@ -995,7 +1045,7 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
     overfit_risk = overfit_risk_score(report.credibility.value)
     metrics = [
         (_png_label("return_quality", lang), f"{report.return_quality.value:.0f}/100", _grade_color(report.return_quality.value), ""),
-        (_png_label("overfit_risk", lang), f"{overfit_risk:.0f}/100", _risk_color(overfit_risk), ""),
+        (t("path_risk", lang), f"{overfit_risk:.0f}/100", _risk_color(overfit_risk), ""),
         (_png_label("maxdd", lang), f"{mdd * 100:.0f}%", _grade_color(report.risk.value), _png_label("historical_path", lang)),
         (_png_label("calmar", lang), f"{calmar_value:.2f}", _grade_color(report.return_quality.value), _png_label("risk_adjusted_return", lang)),
     ]
@@ -1047,8 +1097,9 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
     issues_ax.text(0.055, 0.86, _png_label("issues", lang), fontsize=12,
                    color=_CARD_TEXT, fontweight="bold", va="top")
     y = 0.66
+    rc_reason = report.meta.get("random_control_unavailable_reason")
     if co["issues"]:
-        for issue in co["issues"][:3]:
+        for issue in co["issues"][:2 if rc_reason else 3]:
             issues_ax.scatter([0.065], [y - 0.01], s=24, color=accent,
                               transform=issues_ax.transAxes, clip_on=False)
             add_wrapped(issues_ax, 0.105, y, compact_issue_text(issue),
@@ -1056,18 +1107,24 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
                         fontsize=10.5 if lang == "en" else 10,
                         color=_CARD_TEXT, lineheight=0.12)
             y -= 0.20
-    else:
+    if rc_reason:
+        add_wrapped(issues_ax, 0.055, y, t("random_na", lang) + " — " + unavailable_reason(rc_reason, lang),
+                    width=45 if lang == "en" else 22, max_lines=3 if co["issues"] else 4,
+                    fontsize=9.5 if co["issues"] else 10.5, color=_CARD_AMBER, lineheight=0.10)
+    elif not co["issues"]:
         issues_ax.scatter([0.065], [y - 0.01], s=24, color=_CARD_GREEN,
                           transform=issues_ax.transAxes, clip_on=False)
         add_wrapped(issues_ax, 0.105, y, _png_label("no_issues", lang),
                     width=44 if lang == "en" else 20, max_lines=2,
                     fontsize=10.5, color=_CARD_TEXT, lineheight=0.12)
 
-    fig.text(0.045, 0.085, _png_label("note", lang), fontsize=9.5,
+    fig.text(0.045, 0.085, t("proxy_scope", lang), fontsize=9.5,
              color=_CARD_FAINT, va="center")
     fig.text(0.68, 0.085, cta or _png_label("audit_report_cta", lang), fontsize=12,
              color=_CARD_GREEN, fontweight="bold", va="center")
 
+    fig.text(0.045, 0.040, method_note(report, lang), fontsize=7.5, color=_CARD_MUTED, va="center")
+    fig.text(0.955, 0.020, "core " + report.meta["core_version"], fontsize=7, color=_CARD_FAINT, ha="right")
     fig.savefig(out_path, dpi=100, facecolor=_CARD_BG)
     plt.close(fig)
     return out_path
@@ -1076,7 +1133,9 @@ def render_unified_png(report, returns: pd.Series, out_path: str, *,
 def render_free_pdf(report, returns: pd.Series, out_path: str, *,
                     bench: Optional[dict] = None, lang: str = "en",
                     triage: Optional[dict] = None) -> str:
-    """Render a compact three-page PDF containing only free-screening evidence."""
+    """Render a free diagnostic; trade logs receive one descriptive page."""
+    if report.meta.get("descriptive_only"):
+        return _render_descriptive_artifact(report, out_path, lang)
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1162,10 +1221,11 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
     mc = metrics.monte_carlo(r, ppy)
     issues = (_coaching(report).get("issues") or [])[:3]
     evidence = report.meta.get("evidence") or {}
-    next_step = (triage or {}).get("next_step") or {}
+    from .triage import next_step as choose_next_step
+    next_step = (triage or {}).get("next_step") or choose_next_step(report, lang=lang)
     status_color = _CARD_AMBER if report.grade == "PROVISIONAL" else (
         _CARD_RED if report.judgement == "FLAGGED" else _CARD_GREEN)
-    _maybe_cjk_font(plt, *copy.values(), _localized_headline(report, lang))
+    _maybe_cjk_font(plt, *copy.values(), _localized_headline(report, lang), pdf=True)
 
     def new_page():
         fig = plt.figure(figsize=(8.27, 11.69), facecolor=_CARD_BG)
@@ -1177,7 +1237,9 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         }.get(lang, "FREE SCORE")
         fig.text(0.935, 0.955, score_tag,
                  color=_CARD_FAINT, fontsize=8.5, ha="right")
-        fig.text(0.065, 0.035, copy["footer"], color=_CARD_FAINT, fontsize=7.8)
+        note = "\n".join(textwrap.wrap(method_note(report, lang) + " " + t("proxy_scope", lang), width=62 if lang in {"zh", "ja", "ko"} else 110))
+        fig.text(0.065, 0.085, note, color=_CARD_MUTED, fontsize=6.5, va="top")
+        fig.text(0.065, 0.035, copy["footer"] + " · core " + report.meta["core_version"], color=_CARD_FAINT, fontsize=7.0)
         return fig
 
     def panel(fig, bounds, *, face=_CARD_PANEL, edge=_CARD_BORDER):
@@ -1272,7 +1334,7 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         pillars_ax.text(0.04, 0.88, copy["why"], color=_CARD_TEXT, fontsize=12, fontweight="bold")
         rows = [
             (t("return_quality", lang), report.return_quality.value, _grade_color(report.return_quality.value)),
-            (t("credibility", lang), overfit_risk_score(report.credibility.value), _risk_color(overfit_risk_score(report.credibility.value))),
+            (t("path_risk", lang), overfit_risk_score(report.credibility.value), _risk_color(overfit_risk_score(report.credibility.value))),
             (t("drawdown_control", lang), report.risk.value, _grade_color(report.risk.value)),
         ]
         if report.edge is not None:
@@ -1344,10 +1406,13 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
             x = range(len(mc["band_mid"]))
             mc_ax.fill_between(x, mc["band_lo"], mc["band_hi"], color=_CARD_BLUE, alpha=0.20)
             mc_ax.plot(x, mc["band_mid"], color=_CARD_BLUE, lw=1.2)
-            mc_ax.text(0.03, 0.91, f"{copy['prob_profit']}: {(1 - mc['prob_loss']) * 100:.0f}%",
+            mc_ax.text(0.03, 0.91, f"{t('bootstrap_profit_share', lang)}: {(1 - mc['prob_loss']) * 100:.0f}%",
                        transform=mc_ax.transAxes, color=_CARD_MUTED, fontsize=7.2, va="top")
             mc_ax.text(0.03, 0.80, f"{copy['worst']}: {mc['maxdd_worst5'] * 100:.1f}%",
                        transform=mc_ax.transAxes, color=_CARD_MUTED, fontsize=7.2, va="top")
+        else:
+            mc_ax.text(0.03, 0.80, "N/A: " + str(metrics.monte_carlo_unavailable_reason(r, ppy) or "unavailable"),
+                       transform=mc_ax.transAxes, color=_CARD_MUTED, fontsize=7.2, va="top", wrap=True)
         mc_ax.set_title(copy["mc"], color=_CARD_TEXT, fontsize=9, loc="left", pad=8)
         mc_ax.tick_params(colors=_CARD_FAINT, labelsize=6); mc_ax.grid(color="#252b35", alpha=0.7, linewidth=0.5)
         for spine in mc_ax.spines.values(): spine.set_color(_CARD_BORDER)
@@ -1357,7 +1422,12 @@ def render_free_pdf(report, returns: pd.Series, out_path: str, *,
         fig = new_page()
         fig.text(0.065, 0.89, copy["findings"], color=_CARD_TEXT, fontsize=22, fontweight="bold")
         findings_ax = panel(fig, [0.065, 0.52, 0.87, 0.31])
-        if not issues:
+        rc_reason = report.meta.get("random_control_unavailable_reason")
+        if rc_reason and not issues:
+            detail = t("random_na", lang) + " — " + unavailable_reason(rc_reason, lang)
+            findings_ax.text(0.045, 0.82, wrap_render_text(findings_ax, detail, max_width=0.9,
+                             fontsize=11, max_lines=5), color=_CARD_AMBER, fontsize=11, va="top")
+        elif not issues:
             findings_ax.text(0.045, 0.82, copy["none"], color=_CARD_GREEN, fontsize=11, fontweight="bold")
             ep = (triage or {}).get("edge_persistence") or {}
             ev = (triage or {}).get("evidence_confidence") or {}

@@ -176,7 +176,7 @@ const DIAGNOSTIC_COPY = {
     noData: '暂无可显示数据',
     noIssues: '未发现明确硬伤。仍建议检查成本、滑点、极端行情窗口和真实逐日盯市回撤。',
     sims: '次模拟',
-    profit: '盈利概率',
+    profit: '历史重采样盈利占比',
     cagrBand: '年化收益率 5%–95%',
     worst5: '最差 5% 最大回撤',
     strategy: '策略',
@@ -207,7 +207,7 @@ const DIAGNOSTIC_COPY = {
     noData: 'No data available',
     noIssues: 'No clear hard failure in the free scorecard. Next check costs, slippage, crisis windows, and true MTM drawdown.',
     sims: 'simulations',
-    profit: 'profit probability',
+    profit: 'historical bootstrap profit share',
     cagrBand: 'CAGR 5-95%',
     worst5: 'worst 5% MaxDD',
     strategy: 'Strategy',
@@ -238,7 +238,7 @@ const DIAGNOSTIC_COPY = {
     noData: '表示データなし',
     noIssues: '明確な重大問題はありません。次にコスト、スリッページ、危機局面、真のMTMドローダウンを確認してください。',
     sims: '回シミュレーション',
-    profit: '利益確率',
+    profit: '過去再標本化の利益比率',
     cagrBand: 'CAGR 5-95%',
     worst5: 'worst 5% MaxDD',
     strategy: '戦略',
@@ -269,7 +269,7 @@ const DIAGNOSTIC_COPY = {
     noData: '표시할 데이터 없음',
     noIssues: '명확한 치명적 문제는 없습니다. 다음으로 비용, 슬리피지, 위기 구간, 실제 MTM 드로다운을 확인하세요.',
     sims: '회 시뮬레이션',
-    profit: '수익 확률',
+    profit: '과거 재표본 수익 비율',
     cagrBand: 'CAGR 5-95%',
     worst5: 'worst 5% MaxDD',
     strategy: '전략',
@@ -300,7 +300,7 @@ const DIAGNOSTIC_COPY = {
     noData: 'Sin datos disponibles',
     noIssues: 'No hay fallo claro en el scorecard gratuito. Luego revisa costos, slippage, crisis y drawdown MTM real.',
     sims: 'simulaciones',
-    profit: 'prob. de ganancia',
+    profit: 'proporción rentable histórica',
     cagrBand: 'CAGR 5-95%',
     worst5: 'worst 5% MaxDD',
     strategy: 'Estrategia',
@@ -331,7 +331,7 @@ const DIAGNOSTIC_COPY = {
     noData: 'Sem dados disponíveis',
     noIssues: 'Não há falha clara no scorecard gratuito. Depois revise custos, slippage, crises e drawdown MTM real.',
     sims: 'simulações',
-    profit: 'prob. de lucro',
+    profit: 'proporção lucrativa histórica',
     cagrBand: 'CAGR 5-95%',
     worst5: 'worst 5% MaxDD',
     strategy: 'Estratégia',
@@ -530,14 +530,14 @@ function localizedPillarName(name, data, lang = langInput.value) {
       es: 'Detección de sobreajuste',
       'pt-BR': 'Detecção de overfit',
     },
-    'Overfit risk': {
-      zh: '过拟合风险',
-      en: 'Overfit risk',
-      ja: '過剰最適化リスク',
-      ko: '과최적화 위험',
-      es: 'Riesgo de sobreajuste',
-      'pt-BR': 'Risco de overfit',
-    },
+    'Path risk': {
+        'zh': '路径风险（不含搜索）',
+        'en': 'Path risk (excludes search)',
+        'ja': '経路リスク（探索を除く）',
+        'ko': '경로 위험 (탐색 제외)',
+        'es': 'Riesgo de trayectoria (sin búsqueda)',
+        'pt-BR': 'Risco da trajetória (sem busca)',
+      },
     'Drawdown risk': {
       zh: '回撤控制',
       en: 'Drawdown control',
@@ -803,13 +803,25 @@ async function emailArtifacts() {
   }
 }
 
+function searchNote(meta, lang) {
+  const copy = {
+    en: ['Search trials', 'unknown', 'approximate DSR'],
+    zh: ['搜索次数', '未知', '近似 DSR'],
+    ja: ['探索回数', '不明', '近似 DSR'],
+    ko: ['탐색 횟수', '알 수 없음', '근사 DSR'],
+    es: ['Pruebas de búsqueda', 'desconocidas', 'DSR aproximado'],
+    'pt-BR': ['Tentativas de busca', 'desconhecidas', 'DSR aproximado'],
+  }[lang] || ['Search trials', 'unknown', 'approximate DSR'];
+  return `${copy[0]}: ${meta.n_trials ?? copy[1]} · ${copy[2]}: ${meta.dsr == null ? 'N/A' : Number(meta.dsr).toFixed(3)}`;
+}
+
 function normalizeScorePayload(payload, lang) {
   // Consume the same public score contract as the website; never rescore in JS.
   if (!payload?.report) return payload;
   const report = payload.report;
   const pillars = { ...(report.pillars || {}) };
   delete pillars.Credibility;
-  pillars['Overfit risk'] = { value: report.overfit_risk, raw: {} };
+  pillars['Path risk'] = { value: report.path_risk ?? report.overfit_risk ?? null, raw: {} };
   return {
     ...report,
     pillars,
@@ -820,21 +832,21 @@ function normalizeScorePayload(payload, lang) {
 }
 
 function renderResult(data) {
-  const display = Number(data.display ?? data.overall ?? 0);
-  document.getElementById('score-number').textContent = Number.isFinite(display) ? display.toFixed(1) : '--';
+  const display = data.display ?? data.overall;
+  document.getElementById('score-number').textContent = Number.isFinite(display) ? Number(display).toFixed(1) : 'N/A';
   const grade = data.grade || data.tier || data.judgement || '--';
   document.getElementById('score-grade').textContent = localizedGrade(grade);
   document.getElementById('score-headline').textContent = data.headline_local || data.headline || '';
 
   const pillars = Object.entries(data.pillars || {});
   document.getElementById('pillar-list').innerHTML = pillars.map(([name, pillar]) => {
-    const value = Math.max(0, Math.min(100, Number(pillar.value || 0)));
+    const value = pillar.value == null ? null : Math.max(0, Math.min(100, Number(pillar.value)));
     const label = localizedPillarName(name, data);
     return `
       <div class="pillar">
         <div class="pillar-name" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
-        <div class="pillar-track"><div class="pillar-fill" style="width:${value}%"></div></div>
-        <div class="pillar-value">${Math.round(value)}</div>
+        <div class="pillar-track"><div class="pillar-fill" style="width:${value ?? 0}%"></div></div>
+        <div class="pillar-value">${value == null ? 'N/A' : Math.round(value)}</div>
       </div>
     `;
   }).join('');
@@ -846,7 +858,7 @@ function renderResult(data) {
   const bars = meta.n ? `${meta.n} ${copy.bars}` : '';
   const years = meta.span_years ? `${Number(meta.span_years).toFixed(2)} ${copy.years}` : '';
   const edge = data.lights?.edge ? localizedEdge(data.lights.edge) : '';
-  document.getElementById('meta-line').textContent = [asset, source, bars, years, edge].filter(Boolean).join(' · ');
+  document.getElementById('meta-line').textContent = [asset, source, bars, years, edge, `core ${meta.core_version || 'unknown'}`, searchNote(meta, langInput.value), langInput.value === 'zh' ? '仅日级代理比较，不是择时认证' : 'Daily proxy only; not timing certification', meta.random_control_unavailable_reason ? 'N/A: ' + (langInput.value === 'zh' ? meta.random_control_unavailable_detail_zh : meta.random_control_unavailable_detail) : ''].filter(Boolean).join(' · ');
 
   const flags = Array.isArray(data.flags) ? data.flags : [];
   document.getElementById('flag-list').innerHTML = flags.map((flag) => {

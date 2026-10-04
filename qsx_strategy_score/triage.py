@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from . import metrics
-from .i18n import t
+from .i18n import unavailable_reason, t
 
 
 @dataclass
@@ -120,6 +120,8 @@ def evidence_confidence(returns: pd.Series, meta: Optional[dict] = None, *,
     else:
         points += 1
         reasons.append("bar-level return/equity path")
+    if is_trade_log:
+        points = min(points, 2)
     if points >= 5:
         level = "high"
     elif points >= 3:
@@ -156,9 +158,6 @@ def trade_dependency_scan(returns: pd.Series, meta: Optional[dict] = None, *,
     top1 = float(pos.iloc[:1].sum() / total_pos) if total_pos > 0 else 0.0
     top3 = float(pos.iloc[:3].sum() / total_pos) if total_pos > 0 else 0.0
     top5 = float(pos.iloc[:5].sum() / total_pos) if total_pos > 0 else 0.0
-    without_top3 = r.copy()
-    if len(pos):
-        without_top3.loc[pos.index[:3]] = 0.0
     gross_gain = float(r[r > 0].sum())
     gross_loss = float(abs(r[r < 0].sum()))
     profit_factor = gross_gain / gross_loss if gross_loss > 0 else float("inf")
@@ -174,10 +173,10 @@ def trade_dependency_scan(returns: pd.Series, meta: Optional[dict] = None, *,
         "top1_positive_pnl_share": round(top1, 4),
         "top3_positive_pnl_share": round(top3, 4),
         "top5_positive_pnl_share": round(top5, 4),
-        "compound_without_top3": round(float(np.prod(1.0 + without_top3) - 1.0), 4),
+        "descriptive_only": True,
+        "share_basis": "sum of positive trade percentage returns, not account PnL",
         "reason": (
-            f"Top 3 winning trades contribute {top3 * 100:.1f}% of positive PnL; "
-            f"compound return without them is {(np.prod(1.0 + without_top3) - 1.0) * 100:.1f}%."
+            f"Top 3 winning trades contribute {top3 * 100:.1f}% of the sum of positive trade returns; this is not account PnL."
         ),
     }
 
@@ -193,13 +192,10 @@ def dependency_lite(returns: pd.Series, meta: Optional[dict] = None,
             "type": "returns_dependency_lite",
             "reason": "Add the traded asset K-line to estimate beta/correlation vs hold.",
         }
-    strat_curve = pd.Series(benchmark.get("strat_curve")).astype(float)
-    hold_curve = pd.Series(benchmark.get("bnh_curve")).astype(float)
-    sr = strat_curve.pct_change().dropna()
-    hr = hold_curve.pct_change().dropna()
-    joined = pd.concat([sr.rename("strategy"), hr.rename("hold")], axis=1).dropna()
-    if len(joined) < 40 or joined["hold"].std(ddof=1) == 0:
-        return {"available": False, "type": "returns_dependency_lite", "reason": "Benchmark overlap is too short."}
+    joined, reason = metrics.paired_daily_returns(benchmark["strat_curve"], benchmark["bnh_curve"], min_periods=40)
+    if reason or joined["asset"].std(ddof=1) == 0:
+        return {"available": False, "type": "returns_dependency_lite", "reason": reason or "ZERO_BENCHMARK_VARIANCE"}
+    joined = joined.rename(columns={"strat": "strategy", "asset": "hold"})
     corr = float(joined["strategy"].corr(joined["hold"]))
     beta = float(joined["strategy"].cov(joined["hold"]) / joined["hold"].var(ddof=1))
     label = "low" if abs(corr) < 0.25 else "medium" if abs(corr) < 0.55 else "high"
@@ -258,6 +254,16 @@ def next_step(report, *, lang: str = "en") -> dict:
     evidence = dict(getattr(report, "meta", {}).get("evidence") or {})
     status = evidence.get("status", "insufficient")
     reasons = list(evidence.get("reason_codes") or [])
+    if getattr(report, "meta", {}).get("descriptive_only"):
+        return dict(route="collect_evidence", reason_codes=reasons,
+                    primary_action={"id": "add_account_path", "label": t("upload_account_path", lang)},
+                    secondary_action=None, title=t("trade_only_title", lang), body=t("account_path_required", lang))
+    rc_reason = report.meta.get("random_control_unavailable_reason")
+    if status != "qualified" and evidence.get("benchmark_available") and rc_reason:
+        return dict(route="collect_evidence", reason_codes=reasons,
+                    primary_action={"id": "review_comparison_limits", "label": t("review_comparison_limits", lang)},
+                    secondary_action=None, title=t("random_na", lang),
+                    body=unavailable_reason(rc_reason, lang) + " " + t("proxy_scope", lang))
     if status != "qualified":
         return {
             "route": "collect_evidence",
@@ -291,10 +297,17 @@ def next_step(report, *, lang: str = "en") -> dict:
 
 def build_triage_diagnostics(returns: pd.Series, report, meta: Optional[dict] = None,
                              benchmark: Optional[dict] = None, *, lang: str = "en") -> TriageDiagnostics:
+    meta = dict(meta or {})
+    if report.meta.get("descriptive_only"):
+        meta.update(caliber="closed_trade", input_type="trade_log")
     ppy = float((meta or {}).get("ppy") or getattr(report, "meta", {}).get("ppy") or 252.0)
     dep = dependency_lite(returns, meta, benchmark, lang=lang)
     ev = evidence_confidence(returns, meta, benchmark_available=benchmark is not None, lang=lang)
-    ep = edge_persistence_lite(returns, ppy, lang=lang)
+    if report.meta.get("descriptive_only"):
+        ep = dict(label="unavailable", label_local=t("unavailable", lang), score=None,
+                  reason=t("account_path_required", lang))
+    else:
+        ep = edge_persistence_lite(returns, ppy, lang=lang)
     unlocks = pro_unlock_map(
         meta,
         dependency_available=bool(dep.get("available")),

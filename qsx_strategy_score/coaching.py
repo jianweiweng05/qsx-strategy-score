@@ -15,6 +15,9 @@ from typing import List
 
 # flag code -> {"problem": {en, zh}, "direction": {en, zh}}
 ISSUE_ADVICE = {
+    "ACCOUNT_PATH_REQUIRED": {
+        "problem": {"en": "Only closed-trade statistics are available.", "zh": "目前只能提供已平仓交易描述统计。"},
+        "direction": {"en": "Upload actual account NAV/returns for performance, risk and ratings.", "zh": "请上传真实账户净值或收益序列，再评估账户绩效、风险和评级。"}},
     "TOO_GOOD_TO_BE_TRUE": {
         "problem": {
             "en": "Results look too good to be true — the most common backtest trap.",
@@ -113,9 +116,8 @@ ISSUE_ADVICE = {
             "zh": "上传交易资产的 K 线，检验策略是否跑赢买入持有或随机择时。"}},
     "DSR_FAIL": {
         "problem": {
-            "en": "Given how many variants you tried, this Sharpe is what pure selection luck produces "
-                  "— the deflated Sharpe is below a coin flip.",
-            "zh": "考虑到你试过的版本数量，这条夏普就是纯海选运气能做出来的——折减后的夏普还不到掷硬币。"},
+            "en": "Approximate DSR is below 50% after the reported search trials; this is not a causal diagnosis of luck.",
+            "zh": "按自报搜索次数估计，近似 DSR 低于 50%；这不能证明结果来自运气。"},
         "direction": {
             "en": "Treat it as no demonstrated edge yet: shrink the search space drastically, pick rules "
                   "with a structural rationale, and validate the survivor on data it never touched.",
@@ -149,6 +151,7 @@ ISSUE_ADVICE = {
 
 # priority order: lead with the most fundamental / most actionable problem
 _PRIORITY = [
+    "ACCOUNT_PATH_REQUIRED",
     "FORWARD_LOOKING_INPUT", "TOO_GOOD_TO_BE_TRUE", "NEGATIVE_RETURN", "DSR_FAIL", "INSUFFICIENT_SAMPLE",
     "OOS_NEGATIVE_RETURN", "UNDERPERFORMS_HOLD_RISKADJ", "RANDOM_CONTROL_NOT_BEATEN",
     "OVERFIT_SUSPECT_HOLDOUT", "RANDOM_CONTROL_WEAK_EDGE", "DSR_OVERFIT_RISK",

@@ -19,7 +19,7 @@ from .io import load_prices
 from .metrics import benchmark_compare, monte_carlo
 from .profiles import PROFILE_NAMES
 from .report import render_free_pdf, render_unified_text, render_unified_png
-from .i18n import SUPPORTED_LANGS, normalize_lang
+from .i18n import SUPPORTED_LANGS, normalize_lang, t
 
 
 def _localized_warning(message: str, lang: str) -> str:
@@ -67,14 +67,16 @@ def main(argv: Optional[list] = None) -> int:
                    help="disable automatic asset detection from the strategy returns/filename")
     p.add_argument("--list-assets", action="store_true", dest="list_assets",
                    help="list the bundled asset library and exit")
-    p.add_argument("--n-trials", default=1, type=int, dest="n_trials",
+    p.add_argument("--n-trials", default=None, type=int, dest="n_trials",
                    help="how many strategy/parameter trials you searched before picking this curve "
-                        "(applies a multiple-testing penalty)")
+                        "(default: unknown; applies a multiple-testing penalty when reported)")
     p.add_argument("--out", default=None, metavar="PNG", help="write a shareable PNG report card here")
     p.add_argument("--pdf", default=None, metavar="PDF", help="write a three-page free diagnostic PDF here")
     p.add_argument("--json", default=None, metavar="JSON", help="write the report JSON here")
     p.add_argument("--version", action="version", version=f"qsx-score {__version__}")
     a = p.parse_args(argv)
+    if a.n_trials is not None and a.n_trials < 1:
+        p.error("--n-trials must be a positive integer; omit it when unknown")
     lang = normalize_lang(a.lang)
 
     if a.list_assets:
@@ -104,7 +106,7 @@ def main(argv: Optional[list] = None) -> int:
     if a.benchmark:
         try:
             px = load_prices(a.benchmark, column=a.benchmark_column)
-            bench_cmp = benchmark_compare(r, px)
+            bench_cmp = benchmark_compare(r, px, diagnostics=meta)
             if bench_cmp is None:
                 print("warning: benchmark prices do not overlap the strategy dates.", file=sys.stderr)
         except Exception as e:  # noqa: BLE001
@@ -116,10 +118,10 @@ def main(argv: Optional[list] = None) -> int:
                   f"`python -m qsx_strategy_score.assets --keys {a.asset}`, or use --benchmark.",
                   file=sys.stderr)
         else:
-            bench_cmp = benchmark_compare(r, px)
+            bench_cmp = benchmark_compare(r, px, diagnostics=meta)
             if bench_cmp is None:
                 print(f"warning: '{a.asset}' prices do not overlap the strategy dates.", file=sys.stderr)
-    elif not a.no_auto_asset:
+    elif not a.no_auto_asset and meta.get("caliber") != "closed_trade":
         try:
             detection = detect_asset(r, filename=a.csv)
         except Exception:  # noqa: BLE001
@@ -128,7 +130,7 @@ def main(argv: Optional[list] = None) -> int:
                 and detection.confidence in ("high", "medium"):
             px = asset_close(detection.best.key)
             if px is not None:
-                bench_cmp = benchmark_compare(r, px)
+                bench_cmp = benchmark_compare(r, px, diagnostics=meta)
 
     report = score_unified(r, a.profile, meta=meta, benchmark=bench_cmp, n_trials=a.n_trials)
     triage = build_triage_diagnostics(r, report, meta=meta, benchmark=bench_cmp, lang=lang).to_dict()
@@ -163,11 +165,11 @@ def main(argv: Optional[list] = None) -> int:
         if lang == "zh":
             print(f"  蒙特卡洛（{mc['n_sims']} 次）：年化收益率 5%–95% "
                   f"{mc['cagr_p5']*100:.0f}% 至 {mc['cagr_p95']*100:.0f}% · 最差 5% 最大回撤 "
-                  f"{mc['maxdd_worst5']*100:.0f}% · 盈利概率 {pp}%")
+                  f"{mc['maxdd_worst5']*100:.0f}% · 历史重采样盈利占比 {pp}%")
         else:
             print(f"  Monte Carlo ({mc['n_sims']}x): CAGR 5-95% "
                   f"{mc['cagr_p5']*100:.0f}%..{mc['cagr_p95']*100:.0f}%  ·  worst-5% MaxDD "
-                  f"{mc['maxdd_worst5']*100:.0f}%  ·  P(profit) {pp}%")
+                  f"{mc['maxdd_worst5']*100:.0f}%  ·  historical bootstrap profit share {pp}%")
 
     for w in meta.get("warnings", []):
         label = "提示" if lang == "zh" else "note"
