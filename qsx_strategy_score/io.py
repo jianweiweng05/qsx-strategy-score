@@ -398,7 +398,10 @@ def _parse_dates(s: pd.Series) -> pd.Series:
     # keeping truly unparseable timestamps invalid for the loader to reject.
     missing = parsed.isna() & s.notna()
     if missing.any():
-        parsed.loc[missing] = s.loc[missing].map(lambda v: pd.to_datetime(v, errors="coerce", utc=True))
+        retried = s.loc[missing].map(lambda v: pd.to_datetime(v, errors="coerce", utc=True))
+        # An all-NaT retry can infer a timezone-naive dtype (pandas 3 rejects
+        # assigning that into UTC). Keep the original timezone and resolution.
+        parsed.loc[missing] = pd.to_datetime(retried, errors="coerce", utc=True).astype(parsed.dtype)
     return pd.to_datetime(parsed, errors="coerce", utc=True).dt.tz_localize(None)
 
 
