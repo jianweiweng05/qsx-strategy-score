@@ -7,6 +7,7 @@ only on numpy + pandas. All functions are deterministic (bootstrap is seeded).
 from __future__ import annotations
 
 import math
+import hashlib
 from typing import Optional
 
 import numpy as np
@@ -33,7 +34,9 @@ def equity_curve(r: pd.Series) -> pd.Series:
     vals = np.concatenate([[1.0], np.cumprod(1.0 + arr)])
     idx = getattr(r, "index", None)
     if isinstance(idx, pd.DatetimeIndex) and len(idx):
-        if len(idx) > 1:
+        if r.attrs.get("initial_time") is not None:
+            first = pd.Timestamp(r.attrs["initial_time"])
+        elif len(idx) > 1:
             step = idx[1] - idx[0]
             first = idx[0] - step if step != pd.Timedelta(0) else idx[0]
         else:
@@ -41,7 +44,9 @@ def equity_curve(r: pd.Series) -> pd.Series:
         out_idx = idx.insert(0, first)
     else:
         out_idx = pd.RangeIndex(0, len(vals))
-    return pd.Series(vals, index=out_idx, name="equity")
+    result = pd.Series(vals, index=out_idx, name="equity")
+    result.attrs = dict(r.attrs)
+    return result
 
 
 def cagr(r: pd.Series, ppy: float) -> float:
@@ -382,66 +387,192 @@ def growth_concentration(r: pd.Series):
     return eff_n, float(shares.max())
 
 
-def benchmark_compare(strat_returns: pd.Series, asset_close: pd.Series,
-                      min_overlap_days: float = 20.0):
-    """Strategy vs buy-and-hold of the asset, measured over the OVERLAPPING window
-    of the two series (both sides measured on the same [start, end]).
+def series_hash(series: pd.Series) -> str:
+    """Hash normalized values and UTC timestamps, independent of file name."""
+    idx = series.index
+    if isinstance(idx, pd.DatetimeIndex):
+        times = pd.DatetimeIndex(pd.to_datetime(idx, utc=True).tz_localize(None), dtype="datetime64[ns]").asi8.astype("<i8").tobytes()
+    else:
+        times = np.arange(len(series), dtype="<i8").tobytes()
+    return hashlib.sha256(times + np.asarray(series, dtype="<f8").tobytes()).hexdigest()
 
-    Robust to:
-      * different timeframes — a 1d asset works against a 2h strategy; each series
-        keeps its own bars, we only need the asset's closes inside the overlap.
-      * mismatched / partial date ranges — we use the intersection, not an exact match.
-      * timezone mismatch — trade-log dates are often tz-aware while a price CSV is
-        naive; both are coerced to tz-naive before comparing.
 
-    Returns None only if there is no real overlap (< min_overlap_days or too few
-    points). Comparison is risk-adjusted (Calmar alpha + drawdown reduction);
-    raw return capture is reported as context.
+def account_return_grid_reason(series: pd.Series, *, input_type=None) -> Optional[str]:
+    """Reject incomplete/mixed intraday returns before compounding an account.
+
+    Independent NAV observations can bridge gaps. Same-cutoff daily/session
+    returns are supported; finer returns require one complete regular UTC grid.
     """
-    if not isinstance(strat_returns.index, pd.DatetimeIndex):
+    if (input_type or series.attrs.get("input_type")) == "equity":
         return None
-    if not isinstance(asset_close.index, pd.DatetimeIndex):
+    if not isinstance(series.index, pd.DatetimeIndex) or len(series) < 2:
         return None
-    sr, ac = strat_returns.copy(), asset_close.copy()
-    if getattr(sr.index, "tz", None) is not None:
-        sr.index = sr.index.tz_localize(None)
-    if getattr(ac.index, "tz", None) is not None:
-        ac.index = ac.index.tz_localize(None)
-    sr = sr.sort_index()
-    if sr.index.has_duplicates:
-        sr = sr.groupby(level=0).apply(lambda x: float((1.0 + x).prod() - 1.0))
-    ac = ac[~ac.index.duplicated(keep="last")].sort_index()
+    idx = pd.DatetimeIndex(pd.to_datetime(series.index, utc=True), dtype="datetime64[ns, UTC]")
+    steps = np.diff(idx.asi8)
+    day = pd.Timedelta(days=1).value
+    if len(np.unique(idx.asi8 % day)) == 1 and np.all(steps >= day):
+        return None
+    step = int(steps.min())
+    if step <= 0 or step >= day or day % step or np.any(steps != step):
+        return "INCOMPLETE_INTRADAY_RETURNS"
+    return None
 
-    lo, hi = max(sr.index[0], ac.index[0]), min(sr.index[-1], ac.index[-1])
-    if hi <= lo:
+
+def paired_daily_returns(strategy_nav: pd.Series, asset_nav: pd.Series,
+                         min_periods: int = 120):
+    """Pair UTC day endpoints BEFORE computing either side's returns.
+
+    Daily benchmark closes determine the common cutoff. For intraday benchmark
+    prices the cutoff is 00:00 UTC. Endpoints must actually exist: no forward
+    fill, zero-filled empty days, or partial-day close masquerading as a full day.
+    Intraday return inputs require a complete regular grid; actual NAV observations
+    may bridge gaps because their endpoint levels are independently observed.
+    """
+    curves = []
+    for raw in (strategy_nav, asset_nav):
+        if raw.attrs.get("caliber") == "closed_trade" or raw.attrs.get("input_type") == "trade_log":
+            return None, "ACCOUNT_PATH_REQUIRED"
+        if not isinstance(raw.index, pd.DatetimeIndex) or raw.index.isna().any() or raw.index.has_duplicates:
+            return None, "INVALID_COMPARISON_TIMESTAMPS"
+        nav = raw.astype(float).sort_index()
+        nav.index = pd.DatetimeIndex(pd.to_datetime(nav.index, utc=True).tz_localize(None), dtype="datetime64[ns]")
+        if len(nav) < 2 or not np.isfinite(nav).all() or (nav <= 0).any():
+            return None, "INVALID_COMPARISON_NAV"
+        curves.append(nav)
+    strat, asset = curves
+    day = pd.Timedelta(days=1).value
+    asteps = np.diff(asset.index.asi8)
+    daily_asset = np.median(asteps) >= pd.Timedelta(hours=20).value
+    offsets = np.unique(asset.index.asi8 % day)
+    if daily_asset and len(offsets) != 1:
+        return None, "AMBIGUOUS_DAILY_CUTOFF"
+    cutoff = int(offsets[0]) if daily_asset else 0
+    # Return timestamps describe interval ends. A missing intraday return would
+    # otherwise silently remove PnL; reject incomplete or session-gapped grids.
+    reason = account_return_grid_reason(strat)
+    if reason:
+        return None, reason
+    sampled = [x.loc[(x.index.asi8 % day) == cutoff] for x in curves]
+    sd, ad = sampled
+    if len(sd) < 2 or len(ad) < 2:
+        return None, "DAILY_ENDPOINTS_UNAVAILABLE"
+    lo, hi = max(sd.index[0], ad.index[0]), min(sd.index[-1], ad.index[-1])
+    ad = ad.loc[lo:hi]
+    sd = sd.loc[lo:hi]
+    if len(ad.index.difference(sd.index)):
+        return None, "MISSING_DAILY_ENDPOINTS"
+    joined_nav = pd.concat([sd.rename("strat"), ad.rename("asset")], axis=1, join="inner")
+    if len(joined_nav) < min_periods + 1:
+        return None, "INSUFFICIENT_PAIRED_DAYS"
+    joined = joined_nav.pct_change(fill_method=None).iloc[1:]
+    joined.attrs["nav"] = joined_nav
+    joined.attrs["cutoff_utc"] = str(pd.Timedelta(cutoff))
+    return joined, None
+
+
+def native_static_reference(strategy_nav, asset_nav, paired) -> dict:
+    """Check fixed exposure at the observed native frequency before aggregation.
+
+    Daily-only observations support only a daily proxy. Intraday inputs require
+    matching complete native grids so rebalancing compounding is not mistaken
+    for timing. No positions or execution costs are reconstructed.
+    """
+    curves = []
+    day = pd.Timedelta(days=1).value
+    intraday = False
+    for raw in (strategy_nav, asset_nav):
+        curve = raw.copy()
+        curve.index = pd.DatetimeIndex(pd.to_datetime(curve.index, utc=True).tz_localize(None), dtype="datetime64[ns]")
+        curve = curve.sort_index()
+        intraday |= len(np.unique(curve.index.asi8 % day)) > 1
+        curves.append(curve)
+    if not intraday:
+        return dict(required=False, scope="daily_proxy_only")
+    nav = paired.attrs["nav"]
+    sn, an = [x.loc[nav.index[0]:nav.index[-1]] for x in curves]
+    steps = np.diff(an.index.asi8)
+    if (not sn.index.equals(an.index) or len(steps) == 0 or steps[0] <= 0
+            or day % steps[0] or np.any(steps != steps[0])):
+        return dict(required=True, available=False, reason_code="NATIVE_STATIC_REFERENCE_UNAVAILABLE")
+    sr, ar = sn.pct_change(fill_method=None).iloc[1:], an.pct_change(fill_method=None).iloc[1:]
+    variance = float(ar.var(ddof=1))
+    beta = float(sr.cov(ar) / variance) if variance > 1e-16 else float("nan")
+    fixed = beta * ar
+    if not np.isfinite(beta) or (fixed <= -1).any():
+        return dict(required=True, available=False, reason_code="NATIVE_STATIC_REFERENCE_UNAVAILABLE")
+    fixed_nav = pd.Series(np.r_[1.0, np.cumprod(1 + fixed.to_numpy())], index=sn.index)
+    daily = fixed_nav.loc[nav.index].pct_change(fill_method=None).iloc[1:]
+    ppy = len(daily) / ((nav.index[-1] - nav.index[0]).total_seconds() / (365.25 * 86400))
+    value = calmar(daily, ppy)
+    if not np.isfinite(value):
+        return dict(required=True, available=False, reason_code="NATIVE_STATIC_REFERENCE_UNAVAILABLE")
+    return dict(required=True, available=True, beta=beta, calmar=float(value),
+                scope="native_constant_exposure_rebalanced_each_observation")
+
+
+def benchmark_compare(strat_returns: pd.Series, asset_close: pd.Series,
+                      min_overlap_days: float = 20.0, *, diagnostics: Optional[dict] = None):
+    """Compare common observed daily NAV endpoints; return None if unsupported.
+
+    Optional diagnostics receives a typed unavailability reason for UI callers.
+    Each return is measured from the SAME prior endpoint on both sides. Daily
+    session gaps remain whole intervals; missing intraday returns are not filled.
+    """
+    detail = diagnostics if diagnostics is not None else {}
+    detail.pop("benchmark_unavailable_reason", None)
+    paired, reason = paired_daily_returns(equity_curve(strat_returns), asset_close, min_periods=2)
+    if reason:
+        detail["benchmark_unavailable_reason"] = reason
         return None
+    nav = paired.attrs["nav"]
+    lo, hi = nav.index[0], nav.index[-1]
     overlap_days = (hi - lo).total_seconds() / 86400.0
-    sr_w = sr[(sr.index >= lo) & (sr.index <= hi)]
-    ac_w = ac[(ac.index >= lo) & (ac.index <= hi)]
-    if len(sr_w) < 3 or len(ac_w) < 2 or overlap_days < min_overlap_days:
+    if overlap_days < min_overlap_days:
+        detail["benchmark_unavailable_reason"] = "INSUFFICIENT_OVERLAP_DAYS"
         return None
-    yrs = max(overlap_days / 365.25, 1e-9)
-
+    yrs = overlap_days / 365.25
     def _stats(eq):
-        eq = np.asarray(eq, dtype=float)
-        total = float(eq[-1] / eq[0] - 1.0)
-        cagr = float((eq[-1] / eq[0]) ** (1.0 / yrs) - 1.0) if eq[-1] > 0 else -1.0
-        dd = float((eq / np.maximum.accumulate(eq) - 1.0).min())
-        cal = cagr / abs(dd) if dd < 0 else 0.0
-        return dict(total=total, cagr=cagr, mdd=dd, calmar=cal)
-
-    s_eq = equity_curve(sr_w)
-    s, b = _stats(s_eq.to_numpy()), _stats(ac_w.to_numpy())
-    full_days = (sr.index[-1] - sr.index[0]).total_seconds() / 86400.0
+        vals = np.asarray(eq, dtype=float)
+        total = float(vals[-1] / vals[0] - 1.0)
+        growth = float((vals[-1] / vals[0]) ** (1.0 / yrs) - 1.0)
+        dd = float((vals / np.maximum.accumulate(vals) - 1.0).min())
+        return dict(total=total, cagr=growth, mdd=dd, calmar=growth / abs(dd) if dd < 0 else 0.0)
+    s_eq, b_eq = nav["strat"], nav["asset"]
+    s, b = _stats(s_eq), _stats(b_eq)
+    full = equity_curve(strat_returns)
+    full_days = (full.index[-1] - full.index[0]).total_seconds() / 86400.0
     return dict(
-        years=yrs, window_start=str(lo)[:10], window_end=str(hi)[:10],
+        years=yrs, window_start=lo.isoformat(), window_end=hi.isoformat(),
         overlap_days=round(overlap_days, 1), partial=bool(overlap_days < 0.95 * full_days),
         strat=s, bnh=b, cal_alpha=s["calmar"] - b["calmar"],
-        ret_capture=(s["total"] / b["total"]) if b["total"] not in (0.0,) else float("nan"),
-        dd_reduction=((abs(b["mdd"]) - abs(s["mdd"])) / abs(b["mdd"])) if b["mdd"] < 0 else 0.0,
-        strat_curve=s_eq / float(s_eq.iloc[0]),
-        bnh_curve=ac_w / float(ac_w.iloc[0]),
+        ret_capture=s["total"] / b["total"] if b["total"] != 0 else float("nan"),
+        dd_reduction=(abs(b["mdd"]) - abs(s["mdd"])) / abs(b["mdd"]) if b["mdd"] < 0 else 0.0,
+        strat_curve=s_eq / s_eq.iloc[0], bnh_curve=b_eq / b_eq.iloc[0],
+        comparison_frequency="daily_endpoints", cutoff_utc=paired.attrs["cutoff_utc"],
+        paired_observations=len(paired), benchmark_hash=series_hash(asset_close),
+        native_static_reference=native_static_reference(full, asset_close, paired),
     )
+
+
+MC_MAX_ELEMENTS = 4_000_000
+MC_MIN_SIMS = 300
+
+
+def monte_carlo_unavailable_reason(r: pd.Series, ppy: float, n_sims: int = 2000,
+                                  block: Optional[int] = None) -> Optional[str]:
+    if r.attrs.get("caliber") == "closed_trade" or r.attrs.get("input_type") == "trade_log":
+        return "ACCOUNT_PATH_REQUIRED"
+    if len(r) < 10 or ppy <= 0:
+        return "INSUFFICIENT_OBSERVATIONS"
+    if n_sims < MC_MIN_SIMS:
+        return "MC_TOO_FEW_SIMULATIONS"
+    if block is not None and (block < 1 or int(block) != block):
+        return "MC_INVALID_BLOCK"
+    block = min(int(block), len(r)) if block is not None else max(1, int(round(math.sqrt(len(r)))))
+    padded = int(math.ceil(len(r) / block)) * block
+    if max(len(r) + 1, padded) * MC_MIN_SIMS > MC_MAX_ELEMENTS:
+        return "MC_MEMORY_LIMIT"
+    return None
 
 
 def monte_carlo(r: pd.Series, ppy: float, n_sims: int = 2000,
@@ -458,14 +589,17 @@ def monte_carlo(r: pd.Series, ppy: float, n_sims: int = 2000,
     """
     arr = np.asarray(r, dtype=float)
     n = len(arr)
-    if n < 10 or ppy <= 0:
+    if monte_carlo_unavailable_reason(r, ppy, n_sims=n_sims, block=block):
         return None
-    n_sims = int(min(n_sims, max(300, 4_000_000 // n)))      # cap memory
+    n_sims = int(min(max(1, n_sims), MC_MAX_ELEMENTS // (n + 1)))
     if block is None:
         block = max(1, int(round(math.sqrt(n))))
     block = min(block, n)
     rng = np.random.default_rng(seed)
     n_blocks = int(math.ceil(n / block))
+    n_sims = min(n_sims, MC_MAX_ELEMENTS // (n_blocks * block))
+    if n_sims < MC_MIN_SIMS:
+        return None
     starts = rng.integers(0, n - block + 1, size=(n_sims, n_blocks))
     offs = np.arange(block)
     idx = (starts[:, :, None] + offs[None, None, :]).reshape(n_sims, -1)[:, :n]

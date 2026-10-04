@@ -17,7 +17,7 @@ from .coaching import coaching
 from .triage import build_triage_diagnostics, TriageDiagnostics
 from .report import render_free_pdf
 
-__version__ = "0.3.3"
+from ._version import __version__
 
 __all__ = [
     "load_returns",

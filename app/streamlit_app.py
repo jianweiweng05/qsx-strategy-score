@@ -21,11 +21,11 @@ import streamlit as st
 from qsx_strategy_score import build_triage_diagnostics, load_returns, score_unified, coaching
 from qsx_strategy_score import assets as asset_lib
 from qsx_strategy_score.asset_library import detect_asset, asset_close
-from qsx_strategy_score.i18n import SUPPORTED_LANGS, t
+from qsx_strategy_score.i18n import unavailable_reason, SUPPORTED_LANGS, t
 from qsx_strategy_score.io import load_prices
 from qsx_strategy_score.metrics import benchmark_compare, calmar, cagr, equity_curve, max_drawdown, monte_carlo, sharpe, sortino
-from qsx_strategy_score.overlay_client import OverlayPreviewError, run_overlay_preview, trade_log_to_daily_overlay_returns
-from qsx_strategy_score.report import render_free_pdf, render_unified_png
+from qsx_strategy_score.overlay_client import OverlayPreviewError, run_overlay_preview
+from qsx_strategy_score.report import render_free_pdf, render_unified_png, descriptive_lines, method_note
 
 
 AUTO_ASSET = "__auto__"
@@ -910,7 +910,7 @@ def monte_carlo_summary_markup(mc: dict, lang: str) -> str:
         cagr_range = f"{_fmt_pct_value(mc.get('cagr_p5', 0.0), 0)} 到 {_fmt_pct_value(mc.get('cagr_p95', 0.0), 0)}"
     tail_dd = _fmt_pct_value(mc.get("maxdd_worst5", 0.0), 0)
     cells = [
-        (ft("mc_profit_prob", lang), prob_text),
+        (t("bootstrap_profit_share", lang), prob_text),
         (ft("mc_cagr_range", lang), cagr_range),
         (ft("mc_tail_dd", lang), tail_dd),
     ]
@@ -967,9 +967,9 @@ def risk_tags(report, triage: dict, meta: dict, co: dict, lang: str) -> list[dic
     drawdown = _risk_level(report.risk.value, high_below=55, medium_below=72)
     stability = _risk_level(report.return_quality.value, high_below=55, medium_below=72)
     overfit = _risk_level(report.credibility.value, high_below=55, medium_below=72)
-    if {"TOO_GOOD_TO_BE_TRUE", "DSR_FAIL", "OOS_NEGATIVE_RETURN"} & (flags | issues):
+    if {"TOO_GOOD_TO_BE_TRUE", "OOS_NEGATIVE_RETURN"} & (flags | issues):
         overfit = "high"
-    elif {"DSR_OVERFIT_RISK", "OVERFIT_SUSPECT_HOLDOUT", "LOW_EFFECTIVE_SAMPLE"} & (flags | issues):
+    elif {"OVERFIT_SUSPECT_HOLDOUT", "LOW_EFFECTIVE_SAMPLE"} & (flags | issues):
         overfit = "medium" if overfit == "low" else overfit
     sample = "low" if report.meta.get("sample_ok", True) and float(meta.get("span_years") or 0) >= 2 else "medium"
     tail = drawdown
@@ -1040,7 +1040,7 @@ def risk_tags_markup(tags: list[dict], lang: str) -> str:
     cells = "".join(
         (
             f"<div class='qsx-risk-tag {_risk_tone(tag['level'])}'>"
-            f"<span>{escape(ft(tag['key'], lang))}</span>"
+            f"<span>{escape(t('path_risk', lang) if tag['key'] == 'overfit_risk' else ft(tag['key'], lang))}</span>"
             f"<strong>{escape(_risk_label(tag['level'], lang))}</strong>"
             "</div>"
         )
@@ -1462,7 +1462,7 @@ def render_overlay_preview(
               <div class="qsx-pro-body">{tr("overlay_body", lang)}</div>
               <div class="qsx-small" style="margin-top:12px;">{tr("overlay_privacy", lang)}</div>
               <div class="qsx-small" style="margin-top:6px;">{tr("overlay_online", lang)}</div>
-              <div class="qsx-small" style="margin-top:6px;">{tr("overlay_trade_log_note", lang)}</div>
+              <div class="qsx-small" style="margin-top:6px;">{t("account_path_required", lang)}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1473,24 +1473,22 @@ def render_overlay_preview(
             <div class="qsx-small" style="margin:8px 0 12px;">
               {tr("overlay_privacy", lang)}<br/>
               {tr("overlay_online", lang)}<br/>
-              {tr("overlay_trade_log_note", lang)}
+              {t("account_path_required", lang)}
             </div>
             """,
             unsafe_allow_html=True,
         )
     label = button_label or tr("overlay_button", lang)
+    closed_trade = (meta or {}).get("caliber") == "closed_trade" or (meta or {}).get("input_type") == "trade_log" or returns.attrs.get("caliber") == "closed_trade"
+    if closed_trade:
+        st.info(t("account_path_required", lang))
+        st.button(label, type="primary", disabled=True)
+        return
     if not st.button(label, type="primary"):
         return
     try:
         with st.spinner(label):
-            overlay_returns = returns
-            if (meta or {}).get("input_type") == "trade_log" and upload is not None:
-                try:
-                    upload.seek(0)
-                except Exception:  # noqa: BLE001
-                    pass
-                overlay_returns = trade_log_to_daily_overlay_returns(upload, filename=getattr(upload, "name", None))
-            preview = run_overlay_preview(overlay_returns, lang=lang)
+            preview = run_overlay_preview(returns, lang=lang)
     except OverlayPreviewError as e:
         st.warning(f"{tr('overlay_unavailable', lang)}: {e}")
         return
@@ -1617,6 +1615,8 @@ def main() -> None:
             label_visibility="collapsed",
         )
 
+    trial_count = st.number_input(t("search_trials_input", lang), min_value=0, value=0, step=1)
+
     if not upload_size_ok(up, lang) or not upload_size_ok(bench_up, lang):
         return
 
@@ -1656,6 +1656,24 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
+    if meta.get("caliber") == "closed_trade":
+        report = score_unified(r, meta=meta, n_trials=trial_count or None)
+        triage = build_triage_diagnostics(r, report, meta=meta, lang=lang).to_dict()
+        lines = descriptive_lines(report, lang)
+        st.subheader(lines[0] + " · N/A")
+        st.info(lines[1])
+        for line in lines[2:]:
+            st.write(line)
+        card = strategy_scorecard_png(report, r, None, None, triage, lang)
+        pdf = strategy_report_pdf(report, r, None, triage, lang)
+        if card:
+            st.download_button(tr("download_strategy_card", lang), card, file_name="qsx_trade_statistics.png", mime="image/png")
+        if pdf:
+            st.download_button("PDF", pdf, file_name="qsx_trade_statistics.pdf", mime="application/pdf")
+        st.caption("QSX core " + report.meta["core_version"])
+        render_overlay_preview(r, lang, meta=meta)
+        return
+
     detection = None
     choice = SKIP_ASSET
     try:
@@ -1670,7 +1688,7 @@ def main() -> None:
         asset_note = tr("using_custom", lang)
         try:
             px = load_prices(bench_up)
-            bench_cmp = benchmark_compare(r, px)
+            bench_cmp = benchmark_compare(r, px, diagnostics=meta)
             if bench_cmp is None:
                 st.warning(tr("asset_overlap_warn", lang))
         except Exception as e:  # noqa: BLE001
@@ -1692,11 +1710,16 @@ def main() -> None:
         px = asset_close(choice)
         resolved_profile = asset_lib.ASSET_BY_KEY[choice].profile
         if px is not None:
-            bench_cmp = benchmark_compare(r, px)
+            bench_cmp = benchmark_compare(r, px, diagnostics=meta)
             if bench_cmp is None:
                 st.warning(tr("asset_overlap_warn", lang))
 
-    report = score_unified(r, resolved_profile, meta=meta, benchmark=bench_cmp)
+    report = score_unified(r, resolved_profile, meta=meta, benchmark=bench_cmp, n_trials=trial_count or None)
+    st.caption(method_note(report, lang))
+    st.caption("QSX core " + report.meta["core_version"])
+    if report.meta.get("random_control_unavailable_reason"):
+        st.info(t("random_na", lang) + " — " + unavailable_reason(report.meta["random_control_unavailable_reason"], lang))
+    st.caption(t("proxy_scope", lang))
     co = coaching(report)
     triage = build_triage_diagnostics(r, report, meta=meta, benchmark=bench_cmp, lang=lang).to_dict()
     mc = monte_carlo(r, report.meta["ppy"])

@@ -30,7 +30,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "brand": "QuantScopeX Strategy Score",
         "score_title": "QSX Strategy Score",
         "return_quality": "Return quality",
-        "credibility": "Overfit-risk detection",
+        "credibility": "Path credibility",
         "overfit_hint": "robustness · consistency · anomaly checks",
         "drawdown_control": "Drawdown control",
         "edge_label": "Edge vs hold/random",
@@ -104,7 +104,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "brand": "QuantScopeX Strategy Score",
         "score_title": "QSX Strategy Score",
         "return_quality": "收益质量",
-        "credibility": "过拟合识别",
+        "credibility": "路径可信度",
         "overfit_hint": "稳健性 · 一致性 · 异常平滑 · 收益集中",
         "drawdown_control": "回撤控制",
         "edge_label": "相对买入持有和随机择时",
@@ -178,7 +178,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "brand": "QuantScopeX Strategy Score",
         "score_title": "QSX Strategy Score",
         "return_quality": "収益品質",
-        "credibility": "過剰最適化リスク検出",
+        "credibility": "経路の信頼性",
         "overfit_hint": "堅牢性 · 一貫性 · 異常検出",
         "drawdown_control": "ドローダウン管理",
         "edge_label": "保有/ランダム比の優位性",
@@ -250,7 +250,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "brand": "QuantScopeX Strategy Score",
         "score_title": "QSX Strategy Score",
         "return_quality": "수익 품질",
-        "credibility": "과최적화 탐지",
+        "credibility": "경로 신뢰도",
         "overfit_hint": "견고성 · 일관성 · 이상 징후",
         "drawdown_control": "드로다운 관리",
         "edge_label": "보유/랜덤 대비 우위",
@@ -322,7 +322,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "brand": "QuantScopeX Strategy Score",
         "score_title": "QSX Strategy Score",
         "return_quality": "Calidad del retorno",
-        "credibility": "Detección de sobreajuste",
+        "credibility": "Credibilidad de trayectoria",
         "overfit_hint": "robustez · consistencia · anomalías",
         "drawdown_control": "Control de drawdown",
         "edge_label": "Ventaja vs hold/azar",
@@ -394,7 +394,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "brand": "QuantScopeX Strategy Score",
         "score_title": "QSX Strategy Score",
         "return_quality": "Qualidade do retorno",
-        "credibility": "Detecção de sobreajuste",
+        "credibility": "Credibilidade da trajetória",
         "overfit_hint": "robustez · consistência · anomalias",
         "drawdown_control": "Controle de drawdown",
         "edge_label": "Vantagem vs hold/aleatório",
@@ -675,18 +675,17 @@ def localize_cap_reason(reason: str, lang: str | None = "en") -> str:
     if reason in static:
         return static[reason]
 
-    m = re.match(r"the (\d+) reported search trials alone can explain this result \(DSR (.+)\)$", reason)
+    m = re.match(r"approximate DSR below 50% after (\d+) reported trials \(DSR (.+)\)$", reason)
     if m:
-        if lang == "zh":
-            return f"仅你报告的 {m.group(1)} 次海选就能解释这个结果（DSR {m.group(2)}）"
-        if lang == "ja":
-            return f"報告された {m.group(1)} 回の探索だけで説明可能（DSR {m.group(2)}）"
-        if lang == "ko":
-            return f"보고된 {m.group(1)}회 탐색만으로 설명 가능 (DSR {m.group(2)})"
-        if lang == "es":
-            return f"{m.group(1)} búsquedas reportadas pueden explicarlo (DSR {m.group(2)})"
-        if lang == "pt-BR":
-            return f"{m.group(1)} buscas reportadas podem explicar o resultado (DSR {m.group(2)})"
+        count, value = m.groups()
+        return {
+            "en": f"Approximate DSR below 50% after {count} reported trials (DSR {value})",
+            "zh": f"按自报 {count} 次搜索估计，近似 DSR 低于 50%（DSR {value}）",
+            "ja": f"申告 {count} 回の探索後、近似DSRは50%未満（DSR {value}）",
+            "ko": f"신고 탐색 {count}회 후 근사 DSR이 50% 미만 (DSR {value})",
+            "es": f"DSR aproximado inferior al 50% tras {count} pruebas declaradas (DSR {value})",
+            "pt-BR": f"DSR aproximado inferior a 50% após {count} tentativas declaradas (DSR {value})",
+        }[lang]
     m = re.match(r"Sharpe does not clearly survive (\d+) search trials \(DSR (.+)\)$", reason)
     if m:
         if lang == "zh":
@@ -749,6 +748,8 @@ def localize_flag_message(code: str | None, message: str | None, lang: str | Non
     lang = normalize_lang(lang)
     code = str(code or "")
     raw = str(message or "")
+    if code == "ACCOUNT_PATH_REQUIRED":
+        return t("account_path_required", lang)
     static_keys = {
         "TOO_GOOD_TO_BE_TRUE": "issue.TOO_GOOD_TO_BE_TRUE.problem",
         "BACKGROUND_REQUIRED": "issue.BACKGROUND_REQUIRED.problem",
@@ -855,3 +856,65 @@ def t(key: str, lang: str | None = "en", **kwargs: Any) -> str:
 def has_message(key: str, lang: str | None = "en") -> bool:
     lang = normalize_lang(lang)
     return key in MESSAGES.get(lang, {}) or key in MESSAGES["en"]
+
+
+# v0.4 evidence boundaries. Keep these shared by text, downloads and the app.
+_V040_COPY = {
+    "en": ["Trade statistics only", "Account performance, drawdown, Monte Carlo and ratings: N/A. Upload actual account NAV/returns; closed trades do not reveal the account path.", "Trades: {n}  |  Win rate: {win:.1%}", "Mean: {mean:.2%}  |  Median: {median:.2%}  |  Best: {best:.2%}  |  Worst: {worst:.2%}", "Path risk (excludes search)", "Search trials: {trials}. Approximate DSR: {dsr}. Single-curve variance proxy; positive skew capped; not a causal diagnosis.", "unknown", "Upload account NAV/returns", "Historical bootstrap profit share", "Reported search trials (0 = unknown)"],
+    "zh": ["仅交易描述统计", "账户绩效、回撤、蒙特卡洛与评级：N/A。请上传真实账户净值或收益序列；已平仓交易不能还原账户路径。", "交易数：{n}  |  胜率：{win:.1%}", "均值：{mean:.2%}  |  中位数：{median:.2%}  |  最佳：{best:.2%}  |  最差：{worst:.2%}", "路径风险（不含搜索）", "搜索次数：{trials}。近似 DSR：{dsr}。采用单曲线方差代理，限制正偏度；不能据此归因于运气。", "未知", "上传账户净值或收益序列", "历史重采样盈利占比", "自报搜索次数（0 表示未知）"],
+    "ja": ["取引の記述統計のみ", "口座成績・ドローダウン・モンテカルロ・格付け：N/A。実際の口座NAVまたはリターンをアップロードしてください。決済取引だけでは口座経路は分かりません。", "取引数：{n}  |  勝率：{win:.1%}", "平均：{mean:.2%}  |  中央値：{median:.2%}  |  最良：{best:.2%}  |  最悪：{worst:.2%}", "経路リスク（探索を除く）", "探索回数：{trials}。近似DSR：{dsr}。単一曲線の分散代理、正の歪度を制限。因果診断ではありません。", "不明", "口座NAV・リターンを追加", "過去再標本化の利益比率", "申告探索回数（0＝不明）"],
+    "ko": ["거래 기술 통계만 제공", "계좌 성과, 낙폭, 몬테카를로, 등급: N/A. 실제 계좌 NAV 또는 수익률을 업로드하세요. 청산 거래만으로 계좌 경로를 알 수 없습니다.", "거래 수: {n}  |  승률: {win:.1%}", "평균: {mean:.2%}  |  중앙값: {median:.2%}  |  최고: {best:.2%}  |  최저: {worst:.2%}", "경로 위험 (탐색 제외)", "탐색 횟수: {trials}. 근사 DSR: {dsr}. 단일 곡선 분산 대용치, 양의 왜도 제한. 인과 진단이 아닙니다.", "알 수 없음", "계좌 NAV/수익률 업로드", "과거 재표본 수익 비율", "신고 탐색 횟수 (0 = 알 수 없음)"],
+    "es": ["Solo estadísticas de operaciones", "Rendimiento de cuenta, drawdown, Monte Carlo y calificación: N/A. Sube NAV o retornos reales de la cuenta; las operaciones cerradas no revelan su trayectoria.", "Operaciones: {n}  |  Aciertos: {win:.1%}", "Media: {mean:.2%}  |  Mediana: {median:.2%}  |  Mejor: {best:.2%}  |  Peor: {worst:.2%}", "Riesgo de trayectoria (sin búsqueda)", "Pruebas de búsqueda: {trials}. DSR aproximado: {dsr}. Proxy de varianza de una curva; asimetría positiva limitada; no es diagnóstico causal.", "desconocidas", "Subir NAV/retornos de cuenta", "Proporción rentable del remuestreo histórico", "Pruebas declaradas (0 = desconocidas)"],
+    "pt-BR": ["Apenas estatísticas de operações", "Desempenho da conta, drawdown, Monte Carlo e classificação: N/A. Envie NAV ou retornos reais da conta; operações encerradas não revelam sua trajetória.", "Operações: {n}  |  Acertos: {win:.1%}", "Média: {mean:.2%}  |  Mediana: {median:.2%}  |  Melhor: {best:.2%}  |  Pior: {worst:.2%}", "Risco da trajetória (sem busca)", "Tentativas de busca: {trials}. DSR aproximado: {dsr}. Proxy de variância de uma curva; assimetria positiva limitada; não é diagnóstico causal.", "desconhecidas", "Enviar NAV/retornos da conta", "Proporção lucrativa da reamostragem histórica", "Tentativas declaradas (0 = desconhecidas)"],
+}
+for _lang, _values in _V040_COPY.items():
+    MESSAGES[_lang].update(dict(zip(("trade_only_title", "account_path_required", "trade_count_win", "trade_return_stats", "path_risk", "search_method", "search_unknown", "upload_account_path", "bootstrap_profit_share", "search_trials_input"), _values)))
+
+
+for _lang, _direction in {
+    "en": "Use actual account NAV/returns and a matching daily benchmark; unsupported exposures remain N/A.",
+    "zh": "使用真实账户净值/收益及匹配的日频基准；超出支持范围的敞口仍为 N/A。",
+    "ja": "実際の口座NAV・リターンと一致する日次基準を使用してください。範囲外のエクスポージャーはN/Aです。",
+    "ko": "실제 계좌 NAV/수익률과 일치하는 일별 벤치마크를 사용하세요. 지원 범위 밖 노출은 N/A입니다.",
+    "es": "Usa NAV/retornos reales y un benchmark diario compatible; las exposiciones no admitidas siguen en N/A.",
+    "pt-BR": "Use NAV/retornos reais e um benchmark diário compatível; exposições não suportadas permanecem N/A.",
+}.items():
+    MESSAGES[_lang]["issue.RANDOM_CONTROL_UNAVAILABLE.direction"] = _direction
+
+# Short, concrete reasons shared by CLI, report artifacts and client payloads.
+_UNAVAILABLE_COPY = {
+    "BENCHMARK_MISSING": ["No matching benchmark was supplied.", "尚未提供匹配基准。", "一致する基準がありません。", "일치하는 벤치마크가 없습니다.", "Falta un benchmark compatible.", "Falta um benchmark compatível."],
+    "UNSUPPORTED_OR_SATURATED_EXPOSURE": ["Exposure is near zero, saturated or outside the proxy range.", "敞口接近零、已饱和或超出代理支持范围。", "エクスポージャーがゼロ付近・飽和・対象範囲外です。", "노출이 0에 가깝거나 포화 또는 지원 범위 밖입니다.", "Exposición casi nula, saturada o fuera del proxy.", "Exposição quase nula, saturada ou fora do proxy."],
+    "STATIC_EXPOSURE_NOT_BEATEN": ["The matched static exposure reference was not beaten.", "未跑赢匹配的恒定敞口参考。", "一致する固定エクスポージャー基準を上回っていません。", "일치하는 고정 노출 기준을 이기지 못했습니다.", "No supera la referencia de exposición fija.", "Não supera a referência de exposição fixa."],
+    "NATIVE_STATIC_REFERENCE_UNAVAILABLE": ["Intraday data need a benchmark on the same complete native grid.", "日内数据需要同一完整原始频率的基准。", "日中データには同じ完全な元の頻度の基準が必要です。", "일중 데이터에는 동일한 완전한 원래 빈도의 벤치마크가 필요합니다.", "Los datos intradía necesitan un benchmark con la misma cuadrícula completa.", "Dados intradiários precisam de benchmark na mesma grade completa."],
+    "INSUFFICIENT_PAIRED_DAYS": ["Fewer than 120 paired daily intervals.", "共同日频区间不足 120 个。", "対応する日次区間が120未満です。", "대응하는 일별 구간이 120개 미만입니다.", "Menos de 120 intervalos diarios emparejados.", "Menos de 120 intervalos diários pareados."],
+    "DAILY_ENDPOINTS_UNAVAILABLE": ["The two paths do not share a daily cutoff.", "两条路径没有共同日末时点。", "両経路の日次締め時刻が一致しません。", "두 경로의 일별 마감 시점이 다릅니다.", "Las trayectorias no comparten cierre diario.", "As trajetórias não compartilham fechamento diário."],
+    "MISSING_DAILY_ENDPOINTS": ["Strategy NAV is missing required benchmark endpoints.", "策略净值缺少基准所需的共同端点。", "戦略NAVに必要な基準端点がありません。", "전략 NAV에 필요한 벤치마크 끝점이 없습니다.", "Faltan puntos NAV requeridos por el benchmark.", "Faltam pontos NAV exigidos pelo benchmark."],
+    "DEGENERATE_RANDOM_CONTROL": ["Random reference paths have no usable dispersion.", "随机参考路径没有可用的离散度。", "ランダム基準に有効なばらつきがありません。", "무작위 기준 경로에 유효한 분산이 없습니다.", "Las referencias aleatorias carecen de dispersión útil.", "As referências aleatórias não têm dispersão útil."],
+    "MATCHED_COST_MODEL_REQUIRED": ["Matched execution costs cannot be inferred from returns.", "无法从收益序列推断匹配的交易成本。", "リターンから一致する取引費用は推定できません。", "수익률로 동일한 거래 비용을 추정할 수 없습니다.", "No se pueden inferir costes comparables de los retornos.", "Não é possível inferir custos comparáveis dos retornos."],
+}
+_UNAVAILABLE_COPY["NATIVE_STATIC_EXPOSURE_NOT_BEATEN"] = _UNAVAILABLE_COPY["STATIC_EXPOSURE_NOT_BEATEN"]
+_UNAVAILABLE_COPY["AMBIGUOUS_DAILY_CUTOFF"] = _UNAVAILABLE_COPY["DAILY_ENDPOINTS_UNAVAILABLE"]
+_UNAVAILABLE_COPY["ZERO_BENCHMARK_VARIANCE"] = _UNAVAILABLE_COPY["DEGENERATE_RANDOM_CONTROL"]
+
+
+def unavailable_reason(code: str, lang="en") -> str:
+    if code == "ACCOUNT_PATH_REQUIRED":
+        return t("account_path_required", lang)
+    langs = ["en", "zh", "ja", "ko", "es", "pt-BR"]
+    values = _UNAVAILABLE_COPY.get(code)
+    return values[langs.index(normalize_lang(lang))] if values else str(code).replace("_", " ").lower()
+
+
+for _lang, _copy in zip(["en", "zh", "ja", "ko", "es", "pt-BR"], [
+    ["Daily proxy comparison only; not timing certification.", "Review comparison limits", "Random control: N/A"],
+    ["仅为日级代理比较，不是择时能力认证。", "查看对照适用范围", "随机对照：N/A"],
+    ["日次代理の比較のみ。タイミング能力の認証ではありません。", "比較の適用範囲を確認", "ランダム対照：N/A"],
+    ["일별 대용치 비교이며 타이밍 능력 인증이 아닙니다.", "비교 적용 범위 확인", "무작위 대조: N/A"],
+    ["Solo comparación de proxies diarios; no certifica timing.", "Revisar límites de comparación", "Control aleatorio: N/A"],
+    ["Apenas comparação de proxies diários; não certifica timing.", "Revisar limites da comparação", "Controle aleatório: N/A"],
+]):
+    MESSAGES[_lang].update(dict(zip(("proxy_scope", "review_comparison_limits", "random_na"), _copy)))
+
+for _lang in SUPPORTED_LANGS:
+    MESSAGES[_lang]["headline.edge_beat"] = MESSAGES[_lang]["proxy_scope"]

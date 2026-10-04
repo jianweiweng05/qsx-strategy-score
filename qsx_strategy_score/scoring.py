@@ -16,6 +16,8 @@ VETO (caps the score and withholds the tier), not an averaged pillar.
 from __future__ import annotations
 
 import math
+import hashlib
+import json
 from dataclasses import dataclass, field, replace
 from typing import List, Optional
 
@@ -23,8 +25,9 @@ import numpy as np
 import pandas as pd
 
 from . import metrics
+from ._version import __version__, SCORING_VERSION, RANDOM_SEED, RANDOM_SIMS
 from .io import SECONDS_PER_YEAR
-from .i18n import localize_cap_reason
+from .i18n import localize_cap_reason, unavailable_reason
 from .profiles import get_profile, ANCHORS_SOURCE, VALIDATED
 
 T_SPLIT_MIN = 150  # min observations before a train/holdout split is trustworthy
@@ -43,7 +46,7 @@ _FLAG_MSG = {
     "RANDOM_CONTROL_NOT_BEATEN": "strategy does not clearly beat random long/flat exposure on the same asset",
     "MULTIPLE_TESTING_PENALTY": "score was penalized for parameter/search trials",
     "BACKGROUND_REQUIRED": "return scale is unusually large — verify starting capital, leverage, venue fills, capacity and whether this was selected from many variants",
-    "FORWARD_LOOKING_INPUT": "input name or columns explicitly suggest future/leaky/look-ahead data — verify the backtest before trusting the score",
+    "FORWARD_LOOKING_INPUT": "caller confirmed look-ahead in the input — verify the backtest before trusting the score",
     "RETURN_UNIT_SUSPECT": "return units look unusually large — verify percent vs decimal input before trusting the score",
 }
 
@@ -307,148 +310,86 @@ def _oos_gate(r: pd.Series, ppy: float) -> Optional[dict]:
 
 
 def _random_control_gate(benchmark: dict, *, meta: Optional[dict] = None,
-                         sims: int = 128, seed: int = 12345,
-                         cost_bps: float = 2.0) -> Optional[dict]:
+                         sims: int = RANDOM_SIMS, seed: int = RANDOM_SEED,
+                         cost_bps: float = 0.0) -> dict:
+    """Daily signed-beta timing proxy, never a reconstruction of positions.
+
+    Static beta is a required reference. Net execution costs and true occupancy
+    cannot be inferred from one return path; default comparisons add no costs to
+    either side. Unsupported/degenerate cases abstain rather than award an edge.
+    """
+    base = dict(available=False, method="daily_signed_beta_proxy", seed=int(seed),
+                cost_basis="zero_incremental_cost_proxy; actual costs unknown",
+                exposure_basis="absolute regression beta; occupancy unknown")
+    def unavailable(reason, **extra):
+        return dict(base, reason_code=reason, **extra)
+    meta = meta or {}
+    if meta.get("caliber") == "closed_trade" or meta.get("input_type") == "trade_log":
+        return unavailable("ACCOUNT_PATH_REQUIRED")
     if not benchmark or benchmark.get("strat_curve") is None or benchmark.get("bnh_curve") is None:
-        return None
-    meta = dict(meta or {})
-    try:
-        event_rc = _event_random_control_gate(benchmark, meta=meta, sims=sims, seed=seed)
-    except Exception:  # noqa: BLE001 - random control is optional evidence
-        event_rc = None
-    if event_rc is not None:
-        return event_rc
-    try:
-        s_eq = pd.Series(benchmark["strat_curve"]).astype(float)
-        b_eq = pd.Series(benchmark["bnh_curve"]).astype(float)
-        joined = pd.concat([s_eq.pct_change(), b_eq.pct_change()], axis=1, join="inner").dropna()
-        if len(joined) < 120:
-            return None
-        joined.columns = ["strat", "asset"]
-        sr, ar = joined["strat"], joined["asset"]
-        var = float(np.var(ar.to_numpy(), ddof=1))
-        if var <= 0:
-            return None
-        beta = float(np.cov(sr.to_numpy(), ar.to_numpy(), ddof=1)[0, 1] / var)
-        exposure = float(min(max(abs(beta), 0.15), 1.0))
-        ppy = _resolve_ppy(ar, None, {})
-        strat_cal = metrics.calmar(sr, ppy)
-        rng = np.random.default_rng(seed)
-        vals = ar.to_numpy(dtype=float)
-        sims = int(max(32, min(sims, 512)))
-        rand_cal = np.empty(sims)
-        for i in range(sims):
-            pos = rng.binomial(1, exposure, size=len(vals)).astype(float)
-            traded = np.abs(np.diff(np.r_[0.0, pos]))
-            rr = np.r_[0.0, pos[:-1]] * vals - traded * (cost_bps / 10000.0)
-            rs = pd.Series(rr, index=ar.index)
-            rand_cal[i] = metrics.calmar(rs, ppy)
-        finite = np.isfinite(rand_cal)
-        if not finite.any():
-            return None
-        rand_cal = rand_cal[finite]
-        p_value = float((rand_cal >= strat_cal).mean())
-    except Exception:  # noqa: BLE001 - degrade to unavailable instead of failing scoring
-        return None
-    return dict(
-        exposure=exposure,
-        strat_calmar=float(strat_cal),
-        random_calmar_p50=float(np.percentile(rand_cal, 50)),
-        random_calmar_p75=float(np.percentile(rand_cal, 75)),
-        random_calmar_p95=float(np.percentile(rand_cal, 95)),
-        random_p_value=p_value,
-        random_sims=int(len(rand_cal)),
-        method="bar_long_flat",
-    )
+        return unavailable(meta.get("benchmark_unavailable_reason") or "BENCHMARK_MISSING")
+    if cost_bps != 0:
+        return unavailable("MATCHED_COST_MODEL_REQUIRED")
+    paired, reason = metrics.paired_daily_returns(benchmark["strat_curve"], benchmark["bnh_curve"])
+    if reason:
+        return unavailable(reason)
+    sr, ar = paired["strat"], paired["asset"]
+    var = float(ar.var(ddof=1))
+    if not np.isfinite(var) or var <= 1e-16:
+        return unavailable("ZERO_BENCHMARK_VARIANCE")
+    beta = float(sr.cov(ar) / var)
+    exposure = abs(beta)
+    ppy = len(paired) / ((paired.attrs["nav"].index[-1] - paired.attrs["nav"].index[0]).total_seconds() / SECONDS_PER_YEAR)
+    strat_cal = metrics.calmar(sr, ppy)
+    static_returns = beta * ar
+    stats = dict(beta=beta, exposure=exposure, paired_observations=len(paired),
+                 strat_calmar=float(strat_cal))
+    if not np.isfinite(beta) or exposure < 0.15 or exposure >= 1.0 - 1e-8:
+        return unavailable("UNSUPPORTED_OR_SATURATED_EXPOSURE", **stats)
+    if (static_returns <= -1).any():
+        return unavailable("STATIC_REFERENCE_INSOLVENT", **stats)
+    static_cal = metrics.calmar(static_returns, ppy)
+    stats["static_calmar"] = float(static_cal)
+    if not np.isfinite(strat_cal) or not np.isfinite(static_cal):
+        return unavailable("NONFINITE_COMPARISON_METRIC", **stats)
+    if strat_cal <= static_cal + max(1e-9, abs(static_cal) * 1e-8):
+        return unavailable("STATIC_EXPOSURE_NOT_BEATEN", **stats)
+    native = benchmark.get("native_static_reference") or metrics.native_static_reference(
+        benchmark["strat_curve"], benchmark["bnh_curve"], paired)
+    stats["native_static_reference"] = native
+    if native.get("required"):
+        if not native.get("available"):
+            return unavailable("NATIVE_STATIC_REFERENCE_UNAVAILABLE", **stats)
+        native_cal = native["calmar"]
+        if strat_cal <= native_cal + max(1e-9, abs(native_cal) * 1e-8):
+            return unavailable("NATIVE_STATIC_EXPOSURE_NOT_BEATEN", **stats)
+    rng = np.random.default_rng(seed)
+    vals = ar.to_numpy(dtype=float)
+    sims = int(max(32, min(sims, 512)))
+    rand_cal = np.empty(sims)
+    for i in range(sims):
+        # A position is drawn before every interval, including the first one.
+        pos = np.sign(beta) * rng.binomial(1, exposure, size=len(vals))
+        rr = pos * vals
+        if (rr <= -1).any():
+            return unavailable("RANDOM_REFERENCE_INSOLVENT", **stats)
+        rand_cal[i] = metrics.calmar(pd.Series(rr, index=ar.index), ppy)
+    if not np.isfinite(rand_cal).all() or float(np.ptp(rand_cal)) <= 1e-12:
+        return unavailable("DEGENERATE_RANDOM_CONTROL", **stats)
+    exceedances = int((rand_cal >= strat_cal).sum())
+    return dict(base, **stats, available=True, reason_code=None,
+                random_calmar_p50=float(np.percentile(rand_cal, 50)),
+                random_calmar_p75=float(np.percentile(rand_cal, 75)),
+                random_calmar_p95=float(np.percentile(rand_cal, 95)),
+                random_p_value=(exceedances + 1) / (sims + 1),
+                random_exceedances=exceedances, random_sims=sims,
+                p_value_method="(exceedances + 1) / (simulations + 1)")
 
 
 def _event_random_control_gate(benchmark: dict, *, meta: dict,
-                               sims: int = 128, seed: int = 12345) -> Optional[dict]:
-    """Random timing control for closed-trade logs.
-
-    Bar-level random long/flat requires many aligned bar returns. A low-frequency
-    trade log may have only dozens of exits, but it still carries entry/exit
-    durations. For those files, compare the realised trade sequence to random
-    entry windows with the same holding periods on the same asset.
-    """
-    if meta.get("caliber") != "closed_trade":
-        return None
-    entries = meta.get("trade_entry_times") or []
-    exits = meta.get("trade_exit_times") or []
-    if len(entries) < 8 or len(entries) != len(exits):
-        return None
-    b_eq = pd.Series(benchmark["bnh_curve"]).astype(float)
-    if not isinstance(b_eq.index, pd.DatetimeIndex):
-        return None
-    b_eq = b_eq[~b_eq.index.duplicated(keep="last")].sort_index()
-    if len(b_eq) < 30 or float(b_eq.max()) <= 0:
-        return None
-    entry_idx = pd.to_datetime(pd.Series(entries), errors="coerce")
-    exit_idx = pd.to_datetime(pd.Series(exits), errors="coerce")
-    valid = entry_idx.notna() & exit_idx.notna() & (exit_idx >= entry_idx)
-    if int(valid.sum()) < 8:
-        return None
-    holding_days = ((exit_idx[valid] - entry_idx[valid]).dt.total_seconds() / 86400.0)
-    holding_days = holding_days.to_numpy(dtype=float)
-    holding_days = holding_days[np.isfinite(holding_days)]
-    if len(holding_days) < 8:
-        return None
-    asset_dates = pd.DatetimeIndex(b_eq.index)
-    asset_ns = asset_dates.asi8
-    asset_vals = b_eq.to_numpy(dtype=float)
-    if not np.isfinite(asset_vals).all() or np.any(asset_vals <= 0):
-        return None
-
-    trade_returns = []
-    rng = np.random.default_rng(seed)
-    sims = int(max(64, min(sims, 512)))
-    n_dates = len(asset_dates)
-    for days in holding_days:
-        hold_delta = pd.to_timedelta(max(days, 0.0), unit="D")
-        latest_start_ns = (asset_dates[-1] - hold_delta).value
-        max_start = int(np.searchsorted(
-            asset_ns,
-            latest_start_ns,
-            side="right",
-        ))
-        max_start = max(1, min(max_start, n_dates - 1))
-        starts = rng.integers(0, max_start, size=sims)
-        end_targets = asset_dates[starts] + hold_delta
-        ends = np.searchsorted(asset_ns, pd.DatetimeIndex(end_targets).asi8, side="left")
-        ends = np.clip(ends, starts + 1, n_dates - 1)
-        trade_returns.append(asset_vals[ends] / asset_vals[starts] - 1.0)
-    rand_trade_matrix = np.vstack(trade_returns).T
-    finite_rows = np.isfinite(rand_trade_matrix).all(axis=1)
-    rand_trade_matrix = rand_trade_matrix[finite_rows]
-    if len(rand_trade_matrix) < 32:
-        return None
-
-    actual_curve = pd.Series(benchmark["strat_curve"]).astype(float)
-    actual_rets = actual_curve.pct_change().dropna()
-    if len(actual_rets) < 3:
-        return None
-    ppy = float(meta.get("ppy") or len(actual_rets))
-    strat_cal = metrics.calmar(actual_rets, ppy)
-    rand_cal = np.empty(len(rand_trade_matrix))
-    for i, rr in enumerate(rand_trade_matrix):
-        rs = pd.Series(rr)
-        rand_cal[i] = metrics.calmar(rs, ppy)
-    finite = np.isfinite(rand_cal)
-    if not finite.any():
-        return None
-    rand_cal = rand_cal[finite]
-    p_value = float((rand_cal >= strat_cal).mean())
-    return dict(
-        exposure=1.0,
-        strat_calmar=float(strat_cal),
-        random_calmar_p50=float(np.percentile(rand_cal, 50)),
-        random_calmar_p75=float(np.percentile(rand_cal, 75)),
-        random_calmar_p95=float(np.percentile(rand_cal, 95)),
-        random_p_value=p_value,
-        random_sims=int(len(rand_cal)),
-        random_events=int(len(holding_days)),
-        method="event_window",
-    )
+                               sims: int = RANDOM_SIMS, seed: int = RANDOM_SEED):
+    """Retained compatibility entry; closed trades never establish account edge."""
+    return None
 
 
 # ===================================================================== #
@@ -534,7 +475,7 @@ PSR_LUCK_FLOOR = 0.90        # no-asset: PSR below this = hard to tell from luck
 
 @dataclass
 class UnifiedReport:
-    overall: float
+    overall: Optional[float]
     judgement: str                 # OK | CAUTION | FLAGGED
     tier: Optional[str]            # GOLD/SILVER/BRONZE, or None when not earned
     headline: str
@@ -545,7 +486,7 @@ class UnifiedReport:
     lights: dict                   # {'sample': ok|thin, 'edge': beat|lost|random_fail|marginal|luck_unclear|not_evaluated}
     flags: List[dict]
     meta: dict
-    display: float = 0.0           # public grade-scale score (90s=优, 80s=良, 60s=及格, <60 fail)
+    display: Optional[float] = None           # public grade-scale score (90s=优, 80s=良, 60s=及格, <60 fail)
     grade: str = ""               # human grade label (优/良/及格/未达标/存疑)
 
     def subscores(self) -> dict:
@@ -561,20 +502,23 @@ class UnifiedReport:
         return _json_safe(dict(
             overall=self.overall, display=self.display, grade=self.grade,
             judgement=self.judgement, tier=self.tier,
-            overfit_risk=round(overfit_risk_score(self.credibility.value), 1),
+            overfit_risk=_v(SubScore(overfit_risk_score(self.credibility.value), {})),
+            path_risk=_v(SubScore(overfit_risk_score(self.credibility.value), {})),
             evidence=self.meta.get("evidence", {}),
             headline=self.headline, lights=self.lights,
             pillars={k: dict(value=_v(s), raw=s.raw) for k, s in self.subscores().items()},
             flags=self.flags, meta=self.meta))
 
 
-def overfit_risk_score(credibility: float) -> float:
+def overfit_risk_score(credibility: Optional[float]) -> Optional[float]:
     """Map the positive credibility pillar onto a user-facing risk scale.
 
     Credibility is intentionally high-is-good because it feeds the unified score.
-    The public overfit-risk index uses the opposite direction: low is good. It is
-    ordinal, not a calibrated probability of overfitting.
+    This legacy function name is retained for compatibility. The displayed
+    path-risk index excludes parameter search and is not a probability.
     """
+    if credibility is None:
+        return None
     return max(0.0, min(100.0, 100.0 - float(credibility)))
 
 
@@ -602,16 +546,70 @@ def _credibility(robust: SubScore, cons: SubScore, plausibility: SubScore) -> Su
 
 def score_unified(returns: pd.Series, profile_name: str = "other", *,
                   ppy: Optional[float] = None, meta: Optional[dict] = None,
-                  benchmark: Optional[dict] = None, n_trials: int = 1,
-                  random_sims: int = 128, random_seed: int = 12345) -> UnifiedReport:
+                  benchmark: Optional[dict] = None, n_trials: Optional[int] = None,
+                  random_sims: int = RANDOM_SIMS, random_seed: int = RANDOM_SEED) -> UnifiedReport:
     r = returns.astype(float)
     meta = dict(meta or {})
+    closed_trade = any(source.get("caliber") == "closed_trade" or source.get("input_type") == "trade_log"
+                       for source in (meta, r.attrs))
+    for key in ("caliber", "input_type"):
+        if r.attrs.get(key):
+            meta[key] = r.attrs[key]
+    if closed_trade:
+        meta.update(caliber="closed_trade", input_type="trade_log")
+    if not len(r) or not np.isfinite(r).all() or (r <= -1).any():
+        raise ValueError("Returns must be finite, nonempty and greater than -100%.")
+    if n_trials is not None and (isinstance(n_trials, bool) or int(n_trials) != n_trials or n_trials < 1):
+        raise ValueError("n_trials must be a positive integer, or None when unknown.")
+    trials_reported = n_trials is not None
+    if trials_reported:
+        n_trials = int(n_trials)
+    meta.update(core_version=__version__, scoring_version=SCORING_VERSION,
+                random_seed=int(random_seed), random_sims_requested=int(random_sims),
+                input_hash=metrics.series_hash(r),
+                benchmark_hash=benchmark.get("benchmark_hash") if benchmark else None,
+                search_trials_status="self_reported" if trials_reported else "unknown",
+                n_trials=n_trials, validated=VALIDATED, anchors_source=ANCHORS_SOURCE,
+                path_risk_scope="single_path_diagnostics_excluding_search_risk",
+                dsr_method="single-curve variance proxy; positive skew capped; self-reported trial count")
+    snapshot = dict(returns_hash=meta["input_hash"],
+                    initial_time=r.attrs.get("initial_time"),
+                    input_type=meta.get("input_type"), caliber=meta.get("caliber"),
+                    trade_entry_times=meta.get("trade_entry_times"), trade_exit_times=meta.get("trade_exit_times"))
+    meta["input_hash"] = hashlib.sha256(json.dumps(snapshot, sort_keys=True, default=str).encode()).hexdigest()
     A = get_profile(profile_name)
     ppy = _resolve_ppy(r, ppy, meta)
     n = len(r)
     span_years = meta.get("span_years")
     if span_years is None:
         span_years = n / ppy if ppy > 0 else 0.0
+    meta["monte_carlo_unavailable_reason"] = metrics.monte_carlo_unavailable_reason(r, ppy)
+    if meta.get("caliber") == "closed_trade" or meta.get("input_type") == "trade_log":
+        evidence = dict(status="provisional", reason_codes=["ACCOUNT_PATH_REQUIRED"],
+                        benchmark_available=False, benchmark_comparable=False,
+                        random_control_available=False, sample_adequate=False,
+                        experience_adequate=False, metal_tier_eligible=False)
+        meta.update(descriptive_only=True, account_metrics_available=False,
+                    ppy=float(ppy), n=n, span_years=float(span_years), profile=profile_name,
+                    evidence=evidence, sample_unit="trades", random_p=None, dsr=None,
+                    random_control_method=None, random_control_sims=None, random_control_events=None,
+                    random_control_unavailable_reason="ACCOUNT_PATH_REQUIRED",
+                    monte_carlo_unavailable_reason="ACCOUNT_PATH_REQUIRED",
+                    candidate_tier=None, capped=False, cap_reasons=[], cap_reasons_zh=[],
+                    headline_zh="交易日志仅提供描述统计；账户绩效、风险与评级需要真实账户净值或收益路径。",
+                    trade_summary=dict(n_trades=n, win_rate=float((r > 0).mean()),
+                        mean_return=float(r.mean()), median_return=float(r.median()),
+                        best_return=float(r.max()), worst_return=float(r.min())))
+        blank = lambda: SubScore(None, {"available": False, "reason_code": "ACCOUNT_PATH_REQUIRED"})
+        return UnifiedReport(None, "OK", None,
+            "Trade statistics only. Account performance, risk and ratings require an actual account NAV/return path.",
+            blank(), blank(), blank(), None, {"sample": "not_evaluated", "edge": "not_evaluated"},
+            [dict(code="ACCOUNT_PATH_REQUIRED", severity="info", msg="Upload actual account NAV/returns.")],
+            meta, display=None, grade="PROVISIONAL")
+    if not isinstance(r.index, pd.DatetimeIndex) or r.index.isna().any() or r.index.has_duplicates or not r.index.is_monotonic_increasing:
+        raise ValueError("Account returns require unique valid timestamps.")
+    if metrics.account_return_grid_reason(r, input_type=meta.get("input_type")):
+        raise ValueError("INCOMPLETE_INTRADAY_RETURNS: account scoring requires complete regular intraday returns or actual NAV observations.")
     eq = metrics.equity_curve(r)
     cagr_full = metrics.cagr(r, ppy)
 
@@ -646,8 +644,7 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
                + W["risk"] * risk.value)
 
     flags: List[dict] = []
-    n_trials = max(int(n_trials or 1), 1)
-    if n_trials > 1:
+    if n_trials is not None and n_trials > 1:
         overall -= min(18.0, 3.0 * math.log10(n_trials))
         _append_flag(flags, "MULTIPLE_TESTING_PENALTY", severity="info", n_trials=n_trials)
 
@@ -660,7 +657,7 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
     # = "how many search trials this Sharpe survives" — computed regardless, since
     # at n_trials=1 the DSR is just PSR vs 0 and the budget is still informative.
     _dsr_st = metrics.dsr_stats(r)
-    dsr = metrics.dsr_from_stats(_dsr_st, n_trials) if _dsr_st else None
+    dsr = metrics.dsr_from_stats(_dsr_st, n_trials) if _dsr_st and trials_reported else None
     trial_budget = metrics.trial_budget_from_stats(_dsr_st) if _dsr_st else None
     # Low-frequency / event strategies legitimately have FEW trades over a LONG
     # history. Judging them by the daily-bar n_min ("go get >100 observations") is
@@ -676,9 +673,10 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         sample_hard = (n < A["n_min"]) or (span_years < 1.0) or (eff_n is not None and eff_n < SAMPLE_MIN_EFF_N)
     oos = _oos_gate(r, ppy)
     edge_sub = _benchmark(benchmark) if benchmark is not None else None
-    rc = _random_control_gate(benchmark, meta=meta, sims=random_sims, seed=random_seed) if benchmark is not None else None
+    rc = _random_control_gate(benchmark, meta=meta, sims=random_sims, seed=random_seed)
+    rc_available = bool(rc.get("available"))
     cal_alpha = float(edge_sub.raw.get("cal_alpha", 0.0)) if edge_sub is not None else None
-    rand_p = float(rc["random_p_value"]) if rc else None
+    rand_p = float(rc["random_p_value"]) if rc_available else None
 
     # edge light
     if edge_sub is None:                                  # no asset -> free luck signal only
@@ -693,7 +691,7 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
             edge_light = "lost"
         elif rand_p is not None and rand_p > EDGE_RANDOM_HARD_P:
             edge_light = "random_fail"
-        elif rc is None:
+        elif not rc_available:
             edge_light = "hold_only"
         elif bench_v < EDGE_BENCH_MATCH or (rand_p is not None and rand_p > EDGE_RANDOM_SOFT_P):
             edge_light = "marginal"
@@ -714,15 +712,11 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         _append_flag(flags, "TOO_GOOD_TO_BE_TRUE",
                      msg="results look too good to be real — treat as suspect (overfit / "
                          "survivorship / leverage / tiny-capital) until verified", severity="warn")
-    forward_warnings = [
-        str(w) for w in (meta.get("warnings") or [])
-        if "forward-looking" in str(w).lower()
-        or "look-ahead" in str(w).lower()
-        or "target-leak" in str(w).lower()
-    ]
-    if forward_warnings:
-        _append_flag(flags, "FORWARD_LOOKING_INPUT", msg=forward_warnings[0], severity="warn")
-        hard.append("input explicitly suggests forward-looking/leaky data")
+    # File/column names are hints, not proof of leakage. Only an explicit,
+    # caller-confirmed data-integrity declaration can trip this hard gate.
+    if meta.get("known_lookahead") is True:
+        _append_flag(flags, "FORWARD_LOOKING_INPUT", msg="Caller confirmed look-ahead in the input.", severity="warn")
+        hard.append("confirmed look-ahead in input")
     unit_warnings = [
         str(w) for w in (meta.get("warnings") or [])
         if "return units look unusually large" in str(w).lower()
@@ -742,7 +736,6 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         _append_flag(flags, "NEGATIVE_RETURN",
                      msg="strategy is not net profitable over the sample", severity="warn")
     if sample_hard:
-        hard.append("sample too small")
         bits = []
         if n < A["n_min"] or span_years < 1.0:
             bits.append(f"{n} obs / {span_years:.1f}y")
@@ -776,17 +769,15 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
             extra["random_p_value"] = round(rand_p, 4)
         _append_flag(flags, "RANDOM_CONTROL_WEAK_EDGE", severity="warn", **extra)
     elif edge_light == "hold_only":
-        soft.append("random timing control unavailable")
         _append_flag(flags, "RANDOM_CONTROL_UNAVAILABLE",
-                     msg="beat buy & hold, but random timing control could not run on this upload",
+                     msg="Random timing proxy unavailable: " + str(rc.get("reason_code")),
                      severity="info")
     elif edge_light == "luck_unclear":
-        soft.append("no asset comparison; hard to tell from luck")
         _append_flag(flags, "EDGE_HARD_TO_DISTINGUISH_FROM_LUCK",
                      msg="no asset benchmark and a low PSR — add the asset K-line to test vs "
                          "buy & hold / random timing", severity="info")
     elif edge_light == "not_evaluated":
-        soft.append("no asset provided — edge not evaluated")
+        pass  # missing evidence withholds the tier; it does not lower path quality
     if "OVERFIT_SUSPECT_HOLDOUT" in cons.flags:
         _append_flag(flags, "OVERFIT_SUSPECT_HOLDOUT", severity="warn")
     # DSR gate: only bites when the user REPORTS having searched (n_trials>1).
@@ -794,11 +785,10 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
     # silence — below coin-flip means the search alone explains the result.
     if dsr is not None and n_trials > 1:
         if dsr < 0.50:
-            hard.append(f"the {n_trials} reported search trials alone can explain "
-                        f"this result (DSR {dsr:.0%})")
+            hard.append(f"approximate DSR below 50% after {n_trials} reported trials (DSR {dsr:.0%})")
             _append_flag(flags, "DSR_FAIL",
                          msg=f"Deflated Sharpe {dsr:.0%} after {n_trials} reported trials — "
-                             "selection luck alone can produce this Sharpe",
+                             "below the approximate 50% threshold; not a causal diagnosis of luck",
                          severity="warn")
         elif dsr < 0.95:
             soft.append(f"Sharpe does not clearly survive {n_trials} search trials "
@@ -853,15 +843,15 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
 
     benchmark_available = edge_sub is not None
     benchmark_comparable = bool(benchmark_available and not benchmark.get("partial", False))
-    random_control_available = rc is not None
+    random_control_available = rc_available
     experience_adequate = not exp
     evidence_reason_codes = []
     if not benchmark_available:
-        evidence_reason_codes.append("BENCHMARK_MISSING")
+        evidence_reason_codes.append(meta.get("benchmark_unavailable_reason") or "BENCHMARK_MISSING")
     elif not benchmark_comparable:
         evidence_reason_codes.append("BENCHMARK_UNAVAILABLE")
     if benchmark_available and not random_control_available:
-        evidence_reason_codes.append("RANDOM_CONTROL_UNAVAILABLE")
+        evidence_reason_codes.append(rc.get("reason_code") or "RANDOM_CONTROL_UNAVAILABLE")
     if sample_hard:
         evidence_reason_codes.append("SAMPLE_TOO_SMALL")
     if span_years < EXPERIENCE_MIN_YEARS:
@@ -919,9 +909,8 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         headline = f"Indistinguishable from random timing (p={rand_p:.2f}) — no proven timing edge."
         headline_zh = f"和随机择时无法区分（p={rand_p:.2f}），尚未证明有择时优势。"
     elif dsr is not None and n_trials > 1 and dsr < 0.50:
-        headline = (f"After {n_trials} search trials, this Sharpe is what selection luck "
-                    f"produces (DSR {dsr:.0%}).")
-        headline_zh = f"试了 {n_trials} 次海选后，这条夏普就是选优运气能做出来的（DSR {dsr:.0%}）。"
+        headline = f"Approximate DSR is {dsr:.0%} after {n_trials} reported search trials; independent evidence is needed."
+        headline_zh = f"按自报的 {n_trials} 次搜索估计，近似 DSR 为 {dsr:.0%}；仍需独立证据。"
     elif sample_hard:
         headline = "Sample too small — score is provisional; not enough track record to trust."
         headline_zh = "样本太小，结论暂定。现有历史不足以建立信心。"
@@ -935,8 +924,8 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
     elif edge_light == "beat":
         if rand_p is not None:
             headline = (f"Passed the available benchmark and proxy random-control checks (p={rand_p:.2f}); "
-                        "independent validation is still needed.")
-            headline_zh = f"通过当前基准与代理随机对照（p={rand_p:.2f}）；仍需独立验证。"
+                        "this daily proxy result does not certify timing skill.")
+            headline_zh = f"通过当前基准与日级代理随机对照（p={rand_p:.2f}）；这不是择时能力认证。"
         else:
             headline = "Beat buy & hold on this risk-adjusted comparison; independent validation is still needed."
             headline_zh = "在本次风险调整比较中跑赢持有；仍需独立验证。"
@@ -960,7 +949,7 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
     meta.update(dict(
         headline_zh=headline_zh,
         ppy=float(ppy), n=int(n), span_years=float(span_years), cagr=float(cagr_full),
-        profile=profile_name, scoring_version="unified_v3", quality_weights=dict(W),
+        profile=profile_name, scoring_version=SCORING_VERSION, quality_weights=dict(W),
         n_trials=n_trials, anchors_source=ANCHORS_SOURCE, validated=VALIDATED,
         edge_light=edge_light, sample_ok=(not sample_hard),
         low_frequency=bool(is_low_frequency),
@@ -972,7 +961,12 @@ def score_unified(returns: pd.Series, profile_name: str = "other", *,
         # zh mirror of cap_reasons for push-model clients (e.g. the QuantScopeX
         # bilingual web UI re-renders both languages without re-fetching).
         cap_reasons_zh=[localize_cap_reason(x, "zh") for x in (hard + soft + exp)],
-        random_p=(round(rand_p, 4) if rand_p is not None else None),
+        random_p=(round(rand_p, 6) if rand_p is not None else None),
+        random_control=rc,
+        random_control_unavailable_reason=rc.get("reason_code"),
+        random_control_unavailable_detail=unavailable_reason(rc["reason_code"], "en") if rc.get("reason_code") else None,
+        random_control_unavailable_detail_zh=unavailable_reason(rc["reason_code"], "zh") if rc.get("reason_code") else None,
+        comparison_scope="daily_proxy_only_not_timing_certification",
         random_control_method=(rc.get("method") if rc else None),
         random_control_sims=(int(rc["random_sims"]) if rc and rc.get("random_sims") is not None else None),
         random_control_events=(int(rc["random_events"]) if rc and rc.get("random_events") is not None else None),

@@ -16,19 +16,11 @@ from typing import Any
 
 import pandas as pd
 
-from .io import (
-    InputError,
-    _coerce_numeric,
-    _detect_trade_log,
-    _event_entry_mask,
-    _event_exit_mask,
-    _match,
-    _parse_dates,
-    read_user_table,
-)
+from ._version import __version__
+from .metrics import account_return_grid_reason
 
 DEFAULT_OVERLAY_PREVIEW_URL = "https://www.quantscopex.com/api/overlay/preview"
-CLIENT_ID = "qsx-score-free/0.1.0"
+CLIENT_ID = f"qsx-score-free/{__version__}"
 SOURCE_ID = "github-open-source"
 MIN_OVERLAY_PREVIEW_ROWS = 30
 
@@ -50,136 +42,31 @@ def _date_key(ts) -> str:
     return pd.Timestamp(ts).strftime("%Y-%m-%d")
 
 
-def _round_trips_from_tv_event_log(df: pd.DataFrame, tl: dict) -> pd.DataFrame | None:
-    event_col = tl.get("event_col")
-    exit_mask = _event_exit_mask(df, event_col)
-    entry_mask = _event_entry_mask(df, event_col)
-    if exit_mask is None or entry_mask is None:
-        return None
-    trade_col = _match(list(df.columns), ("trade_number", "trade_id", "trade", "id"))
-    if trade_col is None:
-        return None
-
-    dt = _parse_dates(df[tl["exit"]])
-    pnl, parsed_as_pct = _coerce_numeric(df[tl["pnl"]])
-    if tl.get("is_pct") and not parsed_as_pct:
-        pnl = pnl / 100.0
-
-    event_df = pd.DataFrame({
-        "trade_id": df[trade_col].astype(str),
-        "dt": dt,
-        "ret": pnl,
-        "is_entry": entry_mask,
-        "is_exit": exit_mask,
-    }).dropna(subset=["trade_id", "dt"])
-
-    rows = []
-    for _, group in event_df.groupby("trade_id", sort=False):
-        entries = group[group["is_entry"]].sort_values("dt")
-        exits = group[group["is_exit"]].sort_values("dt")
-        if entries.empty or exits.empty:
-            continue
-        entry_row = entries.iloc[0]
-        exit_row = exits.iloc[-1]
-        if pd.isna(exit_row["ret"]):
-            continue
-        rows.append({
-            "entry": entry_row["dt"],
-            "exit": exit_row["dt"],
-            "ret": float(exit_row["ret"]),
-        })
-    if not rows:
-        return None
-    return pd.DataFrame(rows)
-
-
-def _reject_overlapping_trade_windows(work: pd.DataFrame) -> None:
-    intervals = [
-        (pd.Timestamp(row.entry), pd.Timestamp(row.exit))
-        for row in work[["entry", "exit"]].itertuples(index=False)
-    ]
-    intervals.sort(key=lambda item: (item[0], item[1]))
-    latest_end = intervals[0][1]
-    for start_day, end_day in intervals[1:]:
-        if start_day < latest_end:
-            raise OverlayPreviewError(
-                "Trade-log Overlay Preview does not support overlapping positions. "
-                "Upload an equity curve or daily return series so the preview uses "
-                "the aggregate strategy path."
-            )
-        if end_day > latest_end:
-            latest_end = end_day
-
-
 def trade_log_to_daily_overlay_returns(source, *, filename: str | None = None) -> pd.Series:
-    """Expand a trade log into a continuous daily return path for overlay testing.
-
-    The main free score deliberately treats trade logs as closed-trade samples.
-    A risk overlay, however, acts through time. For preview only, we spread each
-    trade's PnL geometrically across its entry-to-exit holding days and fill
-    flat days with zero return.
-    """
-    try:
-        df = read_user_table(source, filename=filename)
-    except InputError as e:
-        raise OverlayPreviewError(str(e)) from e
-    tl = _detect_trade_log(df)
-    if tl is None:
-        raise OverlayPreviewError("Overlay preview could not detect a trade log.")
-    tv_round_trips = None
-    if tl.get("entry") is None and tl.get("tv_event_log"):
-        tv_round_trips = _round_trips_from_tv_event_log(df, tl)
-    if (tl.get("entry") is None or tl.get("exit") is None) and tv_round_trips is None:
-        raise OverlayPreviewError("Trade-log overlay preview needs both entry and exit time columns.")
-    if tl.get("pnl") is None:
-        raise OverlayPreviewError(tl.get("reason") or "Trade-log overlay preview needs a percent/ratio PnL column.")
-
-    if tv_round_trips is not None:
-        work = tv_round_trips
-    else:
-        entry = _parse_dates(df[tl["entry"]])
-        exit_ = _parse_dates(df[tl["exit"]])
-        pnl, parsed_as_pct = _coerce_numeric(df[tl["pnl"]])
-        if tl.get("is_pct") and not parsed_as_pct:
-            pnl = pnl / 100.0
-        work = pd.DataFrame({"entry": entry, "exit": exit_, "ret": pnl})
-    work = work.dropna().sort_values("entry")
-    work = work[work["exit"] >= work["entry"]]
-    if len(work) < 3:
-        raise OverlayPreviewError("Trade log has fewer than 3 valid entry/exit trades.")
-    _reject_overlapping_trade_windows(work)
-
-    rets = work["ret"].astype(float).to_numpy()
-    rets = pd.Series(rets).clip(lower=-0.999).to_numpy()
-    start = pd.to_datetime(work["entry"]).min().normalize()
-    end = pd.to_datetime(work["exit"]).max().normalize()
-    if pd.isna(start) or pd.isna(end) or end < start:
-        raise OverlayPreviewError("Trade log has no usable date span for overlay preview.")
-
-    daily_growth = pd.Series(1.0, index=pd.date_range(start, end, freq="D"))
-    for (_, row), trade_ret in zip(work.iterrows(), rets):
-        start_day = pd.Timestamp(row["entry"]).normalize()
-        end_day = pd.Timestamp(row["exit"]).normalize()
-        days = max(int((end_day - start_day).days) + 1, 1)
-        daily_ret = (1.0 + float(trade_ret)) ** (1.0 / days) - 1.0
-        daily_growth.loc[start_day:end_day] *= 1.0 + daily_ret
-
-    out = daily_growth - 1.0
-    out.name = "overlay_daily_return"
-    return out
+    """Closed trades cannot identify the account path needed by an overlay."""
+    raise OverlayPreviewError(
+        "Trade-log Overlay Preview is unavailable. Upload actual account daily "
+        "returns or an equity curve; trade endpoints do not reveal drawdown."
+    )
 
 
 def normalize_daily_returns(returns: pd.Series, max_rows: int = 5000) -> NormalizedOverlayInput:
     """Convert arbitrary periodic returns into daily compounded returns.
 
-    Intraday or trade-level returns are reduced locally before any network call:
+    Intraday account returns are reduced locally before any network call:
     one row per calendar day, no filenames, no trade log columns, no strategy
     metadata.
     """
     if returns is None or len(returns) == 0:
         raise OverlayPreviewError("No returns available for overlay preview.")
-    s = pd.Series(returns).dropna().astype(float)
-    s = s[~s.index.isna()]
+    if returns.attrs.get("caliber") == "closed_trade" or returns.attrs.get("input_type") == "trade_log":
+        raise OverlayPreviewError("Trade-log Overlay Preview is unavailable; upload account returns/NAV.")
+    s = pd.Series(returns).astype(float)
+    if not isinstance(s.index, pd.DatetimeIndex) or s.index.isna().any() or s.index.has_duplicates:
+        raise OverlayPreviewError("Overlay needs unique, valid account-return timestamps.")
+    if account_return_grid_reason(returns):
+        raise OverlayPreviewError("INCOMPLETE_INTRADAY_RETURNS: provide complete account returns or observed NAV.")
+    s.index = pd.to_datetime(s.index, utc=True).tz_localize(None)
     arr = s.to_numpy(dtype=float)
     if not math.isfinite(float(arr.sum())):
         raise OverlayPreviewError("Returns contain non-finite values.")
@@ -222,6 +109,7 @@ def run_overlay_preview(
             "Content-Type": "text/csv; charset=utf-8",
             "User-Agent": CLIENT_ID,
             "X-QSX-Client": CLIENT_ID,
+            "X-QSX-Core-Version": __version__,
             "X-QSX-Source": SOURCE_ID,
             "X-QSX-Lang": lang,
             "X-QSX-Input-SHA256": normalized.sha256,

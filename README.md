@@ -14,7 +14,7 @@ Other ways to use it: [install the free Chrome extension](https://chromewebstore
 
 Scoring thresholds and hosted components may still change before v1.0.
 
-Upload a return curve, equity curve, or trade log. Get a fast **QSX Score** from 0 to 100, plus the checks that usually decide whether a backtest is worth more research.
+Upload actual account returns or equity to get a **QSX Score** from 0 to 100 and historical screening checks. Closed-trade logs provide descriptive trade statistics only; account performance, risk, ratings and Overlay are N/A.
 
 - QSX Score and grade
 - Overfit and too-good-to-be-true checks
@@ -32,7 +32,7 @@ Many strategies with a positive edge still fail because of poor risk sizing and 
 
 QSX Strategy Score is now available on the Chrome Web Store: [install the free Chrome extension](https://chromewebstore.google.com/detail/qsx-strategy-score/ledfoflekcjogmfnmomcnlkinfpblgck).
 
-The extension is completely free. It lets you upload strategy exports, return curves, equity curves, or closed-trade logs directly from Chrome and get the same QSX screening score, diagnostics, and benchmark checks without setting up Python.
+The extension is completely free. It lets you upload strategy exports, return curves, equity curves, or closed-trade logs directly from Chrome without setting up Python. Account paths receive screening checks; closed-trade logs receive descriptive statistics.
 
 ## Free TradingView Indicator
 
@@ -57,6 +57,8 @@ Is this backtest worth deeper due diligence, or does it look fragile, lucky, ove
 The output is intentionally compact: one path-quality score, evidence status, the main failure modes, a shareable scorecard, and an optional QSX Overlay Preview.
 
 ## How grades work
+
+Version 0.4.0 narrows timing qualification to supported daily account-path comparisons. Unsupported inputs show a reason and N/A. The displayed path-risk index excludes search risk; omitted search-trial counts are unknown. See the [input and comparison contract](docs/input-comparison-contract.md).
 
 The 0-100 number describes the uploaded path. It does **not** prove real alpha or production readiness.
 
@@ -86,7 +88,7 @@ Research audit example:
 
 Your result may differ. The purpose is to test whether the overlay improves risk-adjusted performance on your own strategy.
 
-Overlay Preview rejects trade logs with overlapping per-position trades. Upload an equity curve or daily return series so the preview uses the aggregate strategy path.
+Overlay Preview does not accept trade logs. Upload actual account equity or daily returns; trade endpoints cannot identify the intervening account drawdown.
 
 ## Install and Run
 

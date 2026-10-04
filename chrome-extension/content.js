@@ -497,13 +497,25 @@
     }
   }
 
-  function normalizeScorePayload(payload, lang) {
+  function searchNote(meta, lang) {
+    const copy = {
+    en: ['Search trials', 'unknown', 'approximate DSR'],
+    zh: ['搜索次数', '未知', '近似 DSR'],
+    ja: ['探索回数', '不明', '近似 DSR'],
+    ko: ['탐색 횟수', '알 수 없음', '근사 DSR'],
+    es: ['Pruebas de búsqueda', 'desconocidas', 'DSR aproximado'],
+    'pt-BR': ['Tentativas de busca', 'desconhecidas', 'DSR aproximado'],
+  }[lang] || ['Search trials', 'unknown', 'approximate DSR'];
+  return `${copy[0]}: ${meta.n_trials ?? copy[1]} · ${copy[2]}: ${meta.dsr == null ? 'N/A' : Number(meta.dsr).toFixed(3)}`;
+}
+
+function normalizeScorePayload(payload, lang) {
     // Consume the same public score contract as the website; never rescore in JS.
     if (!payload?.report) return payload;
     const report = payload.report;
     const pillars = { ...(report.pillars || {}) };
     delete pillars.Credibility;
-    pillars['Overfit risk'] = { value: report.overfit_risk, raw: {} };
+    pillars['Path risk'] = { value: report.path_risk ?? report.overfit_risk ?? null, raw: {} };
     return {
       ...report,
       pillars,
@@ -542,7 +554,7 @@
       <div class="qsx-score-card">
         <div class="qsx-score-header">
           <div class="qsx-score-number" style="color: ${gradeColors[data.grade] || '#666'}">
-            ${data.display}
+            ${data.display == null ? 'N/A' : escapeHtml(String(data.display))}
           </div>
           <div class="qsx-score-grade">
             <span class="qsx-badge" style="background: ${gradeColors[data.grade] || '#666'}">
@@ -552,7 +564,7 @@
         </div>
 
         <div class="qsx-headline">
-          ${escapeHtml(data.headline_local || data.headline || '')}
+          ${escapeHtml(data.headline_local || data.headline || '')}<p>${escapeHtml(searchNote(data.meta || {}, lang))} · ${escapeHtml(lang === 'zh' ? '仅日级代理比较，不是择时认证' : 'Daily proxy only; not timing certification')} ${data.meta?.random_control_unavailable_reason ? ' · N/A: ' + escapeHtml(lang === 'zh' ? data.meta.random_control_unavailable_detail_zh || data.meta.random_control_unavailable_reason : data.meta.random_control_unavailable_detail || data.meta.random_control_unavailable_reason) : ''} · core ${escapeHtml(String(data.meta?.core_version || 'unknown'))}</p>
         </div>
 
         <div class="qsx-pillars">
@@ -562,7 +574,7 @@
               <div class="qsx-pillar-bar">
                 <div class="qsx-pillar-fill" style="width: ${pillar.value || 0}%"></div>
               </div>
-              <div class="qsx-pillar-value">${Math.round(pillar.value || 0)}</div>
+              <div class="qsx-pillar-value">${pillar.value == null ? 'N/A' : Math.round(pillar.value)}</div>
             </div>
           `).join('')}
         </div>
@@ -698,13 +710,13 @@
         es: 'Detección de sobreajuste',
         'pt-BR': 'Detecção de overfit',
       },
-      'Overfit risk': {
-        zh: '过拟合风险',
-        en: 'Overfit risk',
-        ja: '過剰最適化リスク',
-        ko: '과최적화 위험',
-        es: 'Riesgo de sobreajuste',
-        'pt-BR': 'Risco de overfit',
+      'Path risk': {
+        'zh': '路径风险（不含搜索）',
+        'en': 'Path risk (excludes search)',
+        'ja': '経路リスク（探索を除く）',
+        'ko': '경로 위험 (탐색 제외)',
+        'es': 'Riesgo de trayectoria (sin búsqueda)',
+        'pt-BR': 'Risco da trajetória (sem busca)',
       },
       'Drawdown risk': {
         zh: '回撤控制',
