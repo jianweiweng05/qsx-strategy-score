@@ -90,7 +90,7 @@ Overlay Preview does not accept trade logs. Upload actual account equity or dail
 
 ## Install and Run
 
-The current core release is **v0.4.0**. Install from its GitHub tag; `qsx-score-free` is the distribution name, but it is **not currently published on PyPI**. GitHub release artifacts and PyPI publication are separate. Python 3.9–3.12 and Git are required for this source-install path.
+The current core release is **v0.4.0**. The GitHub tag installation below is available independently of package-registry availability. `qsx-score-free` is the distribution name; GitHub release artifacts and PyPI publication are separate. Python 3.9–3.12 and Git are required for this source-install path.
 
 ```bash
 git clone --branch v0.4.0 --depth 1 https://github.com/jianweiweng05/qsx-strategy-score.git

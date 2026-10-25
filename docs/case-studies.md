@@ -20,7 +20,7 @@ For all three, buy-and-hold comparison and random-control p-value are **N/A**, w
 
 ## Reproduce from the published core tag
 
-Use Python 3.9–3.12 and Git. This installs the existing GitHub **v0.4.0** tag; `qsx-score-free` is not currently published on PyPI. The three input files are unchanged between that tag and this documentation revision.
+Use Python 3.9–3.12 and Git. This installs the existing GitHub **v0.4.0** tag directly, without relying on a package-registry release. The three input files are unchanged between that tag and this documentation revision.
 
 ```bash
 git clone --branch v0.4.0 --depth 1 https://github.com/jianweiweng05/qsx-strategy-score.git
