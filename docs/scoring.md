@@ -1,6 +1,6 @@
 # Scoring Model
 
-QSX Strategy Score is a fast screening layer for trading backtests. It reads a return curve, equity curve, or trade log and produces a 0-100 score with a plain-English verdict.
+QSX Strategy Score is a fast screening layer for trading backtests. Supported account return/equity paths receive a 0–100 historical path score and evidence status. Accepted closed-trade logs receive descriptive statistics only; account score, risk, metal grades and Overlay are N/A. Overlapping/multi-symbol logs and missing trade times are rejected. See the [v0.4.0 input contract](input-comparison-contract.md).
 
 The free score is built around four questions:
 
@@ -17,7 +17,7 @@ The score is intentionally conservative. A backtest can have attractive returns 
 - Grade: GOLD, SILVER, BRONZE, NEEDS WORK, or FLAGGED
 - Headline verdict
 - Return quality score
-- Overfit-risk detection
+- Path-risk index (excludes search risk); DSR separately discloses the reported or unknown search-trial count
 - Drawdown control score
 - Edge vs buy-and-hold/random timing
 - Sample sufficiency
@@ -39,7 +39,7 @@ See the [calibration policy](calibration.md) for the full eligibility rules and 
 
 ## Sample Scorecards
 
-The README shows the compact overview. The full sample wall below shows four common outcomes: real edge candidate, beta trap, too-clean-to-trust, and benchmark-needed.
+The images below are historical illustrations, not frozen v0.4.0 expected outputs. Recompute from the release tag with an explicit benchmark snapshot before comparing scores. The available checks cannot certify real alpha; calibration remains `VALIDATED=False`.
 
 ![QSX Strategy Score sample scorecards](../assets/readme/sample-scorecard-stack.png)
 

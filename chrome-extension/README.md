@@ -1,6 +1,8 @@
 # QSX Strategy Score
 
-Version 1.3.2 completes Chinese, Japanese, Korean, Spanish, and Brazilian Portuguese result and artifact delivery, including dynamic anomaly messages and localized sample units. Grade, edge, headline, sharing controls, PNG, and the three-page PDF now keep the selected language. PDF files use the corrected measured-width CJK layout from public core v0.3.4.
+This repository contains extension **1.4.0** (`manifest.json`). It displays results from the hosted API, whose response identifies the scoring core separately (current released core: **v0.4.0**). Extension and core version numbers are independent. The store listing may publish a different extension version; the 2026-10-06 submission receipt recorded 1.4.0 pending review and 1.3.2 public, not today's store status.
+
+Account returns and NAV receive supported historical screening checks. Accepted closed-trade logs show descriptive statistics only: account score/risk/ratings and Overlay are N/A. Results and artifacts support `en`, `zh`, `ja`, `ko`, `es`, and `pt-BR`; account diagnostic PDFs have three pages and descriptive trade PDFs have one.
 
 Chrome extension for scoring strategy files with QSX Strategy Score.
 
@@ -28,10 +30,10 @@ The extension supports:
 - automatic asset detection
 - manual benchmark asset selection
 - optional custom benchmark/K-line upload with `date + close/price`
-- the same score, evidence status, overfit-risk index, and result route as the website
-- smart Crypto Universal Overlay / Pro CTA routing with UTM parameters
+- the same account score, evidence status, path-risk index (excluding search risk), and result route as the website
+- next steps to collect free evidence, run an eligible Overlay Preview, or explore a $99 one-time Pro Audit, with UTM parameters
 - native scorecard sharing and X / LinkedIn / Reddit share actions
-- PNG scorecard and three-page free diagnostic PDF downloads
+- PNG scorecard and free diagnostic PDF downloads
 - optional email delivery of both files with separate marketing consent
 
 ## Install For Local Testing
@@ -39,12 +41,12 @@ The extension supports:
 1. Open `chrome://extensions/`.
 2. Enable Developer mode.
 3. Click **Load unpacked**.
-4. Select `/Users/admin/free-score/chrome-extension`.
+4. Select the `chrome-extension` directory inside your local checkout of this repository.
 5. Open the extension popup and upload a strategy file.
 
 ## Chrome Web Store Checklist
 
-- `manifest.json` host permissions include only `https://www.quantscopex.com/*`
+- `manifest.json` host permissions are limited to the official website and TradingView; the scoring API is on `https://www.quantscopex.com/*`
 - icons exist at 16x16, 48x48, and 128x128
 - popup uses the website's `/api/score` proxy
 - screenshots show upload, result, and next-step routing

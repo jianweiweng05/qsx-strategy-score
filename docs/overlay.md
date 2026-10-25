@@ -23,31 +23,14 @@ Typical intent:
 - Reduce the damage from deep drawdown periods
 - Let the original strategy keep its own alpha while adding risk governance outside it
 
-## Audited Example
+## Evidence and next step
 
-From a QuantScopeX research audit snapshot:
+Use the website's [published Controller evidence](https://www.quantscopex.com/tools?utm_source=github&utm_medium=docs&utm_campaign=qsx_strategy_score&utm_content=overlay_evidence) for the model version, data cutoff, asset coverage, costs and limitations. Old research-model figures are not interchangeable with the current subscription model. A historical improvement on one path does not guarantee future improvement.
 
-```text
-Universe: Top150 liquidity crypto, >=730 daily bars, 65 assets
-Execution: delay-1, 10 bps turnover cost
-
-Before Overlay
-CAGR: 31.2%
-Max Drawdown: -81.8%
-Calmar: 0.38
-Avg Exposure: 100.0%
-
-After Overlay
-CAGR: 38.2%
-Max Drawdown: -55.6%
-Calmar: 0.69
-Avg Exposure: 48.4%
-```
-
-Your result may differ. The purpose is to test whether the overlay improves risk-adjusted performance on your own strategy.
+The compatibility Preview is free and optional. The separate Risk Controller subscription ($79/month or $799/year) provides current model exposure, risk state and real change alerts. The $99 Pro Audit is a one-time strategy diagnosis, not a prerequisite or a monthly plan. BTC/ETH research ($149/month) includes Controller access; do not apply the Controller again to that model's final weights.
 
 ## Preview Scope
 
 The open-source repository does not include the production controller sequence or private overlay engine. The preview is designed as a hosted lite simulation so users can test whether their own uploaded return path is a promising Overlay candidate.
 
-Trade-log Overlay Preview rejects overlapping per-position trades because they cannot be converted honestly into one aggregate daily return path. Convert overlapping trade logs to an equity curve or daily return series before using Overlay Preview.
+All closed-trade logs are excluded from Overlay Preview, including sequential nonoverlapping trades. Trade endpoints cannot recover the intervening account drawdown. Supply actual account NAV or complete daily account returns, with consistent capital-flow treatment; do not geometrically interpolate trade PnL into daily returns. Unsupported or insufficient evidence remains N/A. See the [input contract](input-comparison-contract.md).

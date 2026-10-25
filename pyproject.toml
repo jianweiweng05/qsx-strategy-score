@@ -18,7 +18,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://www.quantscopex.com/"
-HostedTool = "https://www.quantscopex.com/tools?utm_source=pypi&utm_medium=project_urls&utm_campaign=qsx_strategy_score"
+HostedTool = "https://www.quantscopex.com/score?utm_source=pypi&utm_medium=project_urls&utm_campaign=qsx_strategy_score"
 FullAuditReport = "https://www.quantscopex.com/report?utm_source=pypi&utm_medium=project_urls&utm_campaign=qsx_strategy_score"
 Source = "https://github.com/jianweiweng05/qsx-strategy-score"
 Issues = "https://github.com/jianweiweng05/qsx-strategy-score/issues"

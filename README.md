@@ -12,6 +12,8 @@ Upload a return curve, equity curve, or trade log. In a few minutes, see whether
 
 Other ways to use it: [install the free Chrome extension](https://chromewebstore.google.com/detail/qsx-strategy-score/ledfoflekcjogmfnmomcnlkinfpblgck) · [run it locally](#install-and-run) · [free TradingView indicator](https://www.tradingview.com/script/nY7jGyZu/) · [Overlay Preview](https://www.quantscopex.com/tools?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=overlay) · [full audit report](https://www.quantscopex.com/report?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=audit_report) · [security](SECURITY.md)
 
+**中文 30 秒入口：** [免费网页评分与内置样例](https://www.quantscopex.com/zh/score?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=zh_quickstart)。账户收益/净值可做历史路径初筛；平仓交易日志只给描述统计，不计算账户分数或 Overlay。无需注册。也可按下方步骤本地安装，用 `--lang zh` 输出中文；CLI 支持六种语言。
+
 Scoring thresholds and hosted components may still change before v1.0.
 
 Upload actual account returns or equity to get a **QSX Score** from 0 to 100 and historical screening checks. Closed-trade logs provide descriptive trade statistics only; account performance, risk, ratings and Overlay are N/A.
@@ -82,44 +84,54 @@ It is not an entry signal, exit signal, or coin selector. It is designed as an o
 original strategy returns x QSX dynamic exposure = overlay-adjusted curve
 ```
 
-Research audit example:
-
-![QSX Overlay before and after](assets/readme/qsx-overlay-before-after.png)
-
-Your result may differ. The purpose is to test whether the overlay improves risk-adjusted performance on your own strategy.
+Inspect the [current published Controller evidence](https://www.quantscopex.com/tools?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=overlay_evidence) and its model version, data cutoff, costs and limitations. Historical results do not guarantee improvement on your strategy.
 
 Overlay Preview does not accept trade logs. Upload actual account equity or daily returns; trade endpoints cannot identify the intervening account drawdown.
 
 ## Install and Run
 
-From this repository:
+The current core release is **v0.4.0**. Install from its GitHub tag; `qsx-score-free` is the distribution name, but it is **not currently published on PyPI**. GitHub release artifacts and PyPI publication are separate. Python 3.9–3.12 and Git are required for this source-install path.
 
 ```bash
-git clone https://github.com/jianweiweng05/qsx-strategy-score.git
+git clone --branch v0.4.0 --depth 1 https://github.com/jianweiweng05/qsx-strategy-score.git
 cd qsx-strategy-score
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install -e ".[app,excel]"
+qsx-score --version
 ```
 
-Score a strategy:
+On Windows, activate with `.venv\Scripts\activate` instead. For CLI-only use, `python -m pip install -e .` installs the core dependencies without Streamlit or Excel support.
+
+Run a bundled example without a market-data download:
 
 ```bash
+qsx-score examples/sample_returns.csv --no-auto-asset --lang en
+```
+
+Missing benchmark evidence keeps the result provisional; it is not a failed installation. For a BTC comparison, download benchmark data first (requires access to the public data source), then score:
+
+```bash
+python -m qsx_strategy_score.assets --keys BTC
 qsx-score examples/strategy_alpha.csv --asset BTC --lang en
 ```
+
+Alternatively use `--benchmark your_prices.csv` with actual overlapping `date,close` prices. Local scoring itself does not upload strategy data. The optional data refresh and hosted Overlay Preview require network access.
 
 Supported languages:
 
 ```bash
-qsx-score examples/strategy_alpha.csv --lang zh
-qsx-score examples/strategy_alpha.csv --lang ja
-qsx-score examples/strategy_alpha.csv --lang ko
-qsx-score examples/strategy_alpha.csv --lang es
-qsx-score examples/strategy_alpha.csv --lang pt-BR
+qsx-score examples/sample_returns.csv --no-auto-asset --lang zh
+qsx-score examples/sample_returns.csv --no-auto-asset --lang ja
+qsx-score examples/sample_returns.csv --no-auto-asset --lang ko
+qsx-score examples/sample_returns.csv --no-auto-asset --lang es
+qsx-score examples/sample_returns.csv --no-auto-asset --lang pt-BR
 ```
 
 Export a shareable PNG, a three-page free diagnostic PDF, and JSON:
 
 ```bash
-qsx-score examples/strategy_alpha.csv --asset BTC --out card.png --pdf diagnostic.pdf --json report.json
+qsx-score examples/sample_returns.csv --no-auto-asset --out card.png --pdf diagnostic.pdf --json report.json
 ```
 
 Run the web app:
@@ -128,23 +140,9 @@ Run the web app:
 streamlit run app/streamlit_app.py
 ```
 
-## Example Result
+## Read the result
 
-```text
-QSX Score: 59 / 100
-Grade: NEEDS WORK
-
-Headline:
-Indistinguishable from random timing (p=0.32)
-No proven timing edge.
-
-Key problems:
-- Max Drawdown: -83%
-- Random timing test failed
-- High dependency to buy-and-hold: corr +0.90, beta +0.82
-```
-
-This does not mean the strategy is useless. It means the uploaded return path looks more like asset beta plus risk exposure than proven timing edge.
+Read the evidence status and reason beside the path score. `PROVISIONAL` or N/A asks for the missing evidence or explains an unsupported comparison; it is not an instruction to buy a report. A material failed check remains visible. A passing daily proxy cannot certify real alpha, and calibration remains `VALIDATED=False`.
 
 ## Input Formats
 
@@ -171,7 +169,7 @@ entry_time,exit_time,pnl_pct,side,symbol
 2021-01-01,2021-02-01,3.2,LONG,DOGE
 ```
 
-CSV, TSV, Excel, TradingView-style exports, return series, equity curves, and closed-trade logs are supported.
+CSV, TSV and TXT are supported; Excel needs the `excel` extra. TradingView-style exports must satisfy the same input contract. Supported closed-trade logs require every entry/exit timestamp and one symbol, with no overlap; they return descriptive statistics only. Use real account returns or NAV for account performance and Overlay. See the [exact input and comparison contract](docs/input-comparison-contract.md).
 
 ## Docs
 
@@ -183,16 +181,15 @@ CSV, TSV, Excel, TradingView-style exports, return series, equity curves, and cl
 - [Security policy](SECURITY.md)
 - [Methodology notes](docs/methodology.md)
 
-## Free vs Pro
+## Choose the next step
 
-| Layer | Free | QuantScopeX Pro |
+| Your task | Free first step | Optional paid product |
 | --- | --- | --- |
-| Role | Screening | Due diligence |
-| Main question | Is this worth investigating? | What does it depend on, when does it fail, and can it be production-ready? |
-| Input | Returns, equity, trade log | Strategy file, asset context, cost/execution assumptions |
-| Output | Text, JSON, PNG scorecard | Deeper strategy due-diligence report |
+| Investigate your own backtest | [Strategy Score](https://www.quantscopex.com/score?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=screening) | [Pro Audit](https://www.quantscopex.com/report?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=audit_report), **$99 once** for deeper diagnosis of the submitted history and whether to enter the next validation stage |
+| Manage existing crypto exposure | [Overlay compatibility Preview](https://www.quantscopex.com/tools?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=overlay#free-risk-check), using actual account returns/NAV | Risk Controller, **$79/month or $799/year**, for current model exposure, risk state and change alerts |
+| Study a BTC/ETH model portfolio | [Public evidence and delivery sample](https://www.quantscopex.com/model-portfolios?utm_source=github&utm_medium=readme&utm_campaign=qsx_strategy_score&utm_content=portfolio#delivery-sample) | BTC/ETH research, **$149/month**, including Controller access |
 
-Free = screening. Pro = due diligence.
+Choose by need; these are not sequential upgrades. Preview is a free, optional compatibility check, not a subscription benefit. BTC/ETH final model weights already include their own controls: do not multiply them by the Controller again. Pro Audit uses sanitized performance history and stated assumptions, not your strategy source code; it does not approve live trading or provide a portfolio allocation.
 
 ## Important Limitations
 
