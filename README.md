@@ -90,19 +90,29 @@ Overlay Preview does not accept trade logs. Upload actual account equity or dail
 
 ## Install and Run
 
-The current core release is **v0.4.0**. The GitHub tag installation below is available independently of package-registry availability. `qsx-score-free` is the distribution name; GitHub release artifacts and PyPI publication are separate. Python 3.9–3.12 and Git are required for this source-install path.
+The current core release is **v0.4.0**, published on [PyPI](https://pypi.org/project/qsx-score-free/0.4.0/). Use Python 3.9–3.12, preferably in a virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install qsx-score-free==0.4.0
+qsx-score --version
+```
+
+On Windows, activate with `.venv\Scripts\activate` instead. The core install provides the CLI for your own CSVs. If you need an alternative installation source, the GitHub tag archive remains available without Git:
+
+```bash
+python -m pip install "https://github.com/jianweiweng05/qsx-strategy-score/archive/refs/tags/v0.4.0.tar.gz"
+```
+
+The bundled example CSVs and Streamlit app below live in the repository, rather than the installed wheel. Get those files with Git; the optional `app,excel` extras add charts, Streamlit and Excel support:
 
 ```bash
 git clone --branch v0.4.0 --depth 1 https://github.com/jianweiweng05/qsx-strategy-score.git
 cd qsx-strategy-score
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[app,excel]"
-qsx-score --version
+python -m pip install "qsx-score-free[app,excel]==0.4.0"
 ```
-
-On Windows, activate with `.venv\Scripts\activate` instead. For CLI-only use, `python -m pip install -e .` installs the core dependencies without Streamlit or Excel support.
 
 Run a bundled example without a market-data download:
 
