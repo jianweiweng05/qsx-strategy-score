@@ -97,6 +97,7 @@ git clone --branch v0.4.0 --depth 1 https://github.com/jianweiweng05/qsx-strateg
 cd qsx-strategy-score
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -e ".[app,excel]"
 qsx-score --version
 ```
@@ -174,6 +175,7 @@ CSV, TSV and TXT are supported; Excel needs the `excel` extra. TradingView-style
 ## Docs
 
 - [Scoring model](docs/scoring.md)
+- [Reproducible v0.4.0 screening examples](docs/case-studies.md)
 - [Calibration policy](docs/calibration.md)
 - [Release governance](docs/release-governance.md)
 - [QSX Overlay Preview](docs/overlay.md)
